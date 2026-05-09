@@ -9,70 +9,138 @@ const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 const Customer = require("../models/Customer");
 const { successResponse, errorResponse } = require("../utils/response");
+const { attachHierarchy } = require("../utils/hierarchy");
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
 
 
-router.post("/",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
+router.post(
+    "/",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    async (req, res) => {
         try {
-            const { codes, customerId, redeemPoints = 0 } = req.body;
-            const { userId, role, superAdminId } = req.user;
+            const {
+                codes,
+                customerId,
+                redeemPoints = 0
+            } = req.body;
 
-            if (!codes || codes.length === 0) {
+            if (!Array.isArray(codes) || codes.length === 0) {
                 return errorResponse(res, "No barcodes provided", 400);
             }
 
+            const hierarchy = attachHierarchy(req.user);
+
             let subTotal = 0;
             let totalGST = 0;
+
             const items = [];
 
-            for (let code of codes) {
-                const barcode = await Barcode.findOne({ code });
+            for (const code of codes) {
+
+              
+                const barcode = await Barcode.findOne({
+                    code,
+                    superAdminId: hierarchy.superAdminId
+                
+                });
 
                 if (!barcode) {
-                    return errorResponse(res, `Invalid barcode: ${code}`, 400);
+                    return errorResponse(
+                        res,
+                        `Invalid or already sold barcode: ${code}`,
+                        400
+                    );
                 }
 
-                const product = await Product.findById(barcode.productId);
+              
+                const product = await Product.findOne({
+                    _id: barcode.productId,
+                    superAdminId: hierarchy.superAdminId
+                });
 
                 if (!product) {
-                    return errorResponse(res, "Product not found", 404);
+                    return errorResponse(
+                        res,
+                        "Product not found",
+                        404
+                    );
                 }
 
-                const gstAmount = (product.price * product.gst) / 100;
-                const finalPrice = product.price + gstAmount;
+              
+                if (product.stock <= 0) {
+                    return errorResponse(
+                        res,
+                        `${product.name} out of stock`,
+                        400
+                    );
+                }
 
-                subTotal += product.price;
+                const price = Number(product.sellingPrice);
+                const gst = Number(product.gst || 0);
+
+                const gstAmount = (price * gst) / 100;
+                const finalPrice = price + gstAmount;
+
+                subTotal += price;
                 totalGST += gstAmount;
 
                 items.push({
                     productId: product._id,
                     barcodeId: barcode._id,
                     name: product.name,
-                    price: product.price,
-                    gst: product.gst,
+                    price,
+                    gst,
                     gstAmount,
                     finalPrice
                 });
 
+                
                 barcode.isSold = true;
                 await barcode.save();
+
+                
+                await Product.updateOne(
+                    {
+                        _id: product._id,
+                        superAdminId: hierarchy.superAdminId
+                    },
+                    {
+                        $inc: {
+                            stock: -1
+                        }
+                    }
+                );
             }
 
-          
             let discount = 0;
             let customer = null;
 
+
             if (customerId) {
-                customer = await Customer.findOne({ customerId });
+
+                customer = await Customer.findOne({
+                    customerId,
+                    superAdminId: hierarchy.superAdminId
+                });
 
                 if (!customer) {
-                    return errorResponse(res, "Customer not found", 404);
+                    return errorResponse(
+                        res,
+                        "Customer not found",
+                        404
+                    );
                 }
 
                 if (redeemPoints > 0) {
+
                     if (customer.loyaltyPoints < redeemPoints) {
-                        return errorResponse(res, "Not enough loyalty points", 400);
+                        return errorResponse(
+                            res,
+                            "Not enough loyalty points",
+                            400
+                        );
                     }
 
                     discount = redeemPoints;
@@ -80,30 +148,25 @@ router.post("/",verifyToken,authorize("super_admin", "admin", "cashier"),async (
                 }
             }
 
-            const grandTotal = subTotal + totalGST - discount;
-            const earnedPoints = Math.floor((subTotal + totalGST) / 100);
+            const grandTotal =
+                subTotal + totalGST - discount;
+
+            const earnedPoints =
+                Math.floor(grandTotal / 100);
 
             if (customer) {
+
                 customer.loyaltyPoints += earnedPoints;
                 customer.totalSpent += grandTotal;
+
                 await customer.save();
-            }
-
-          
-            let adminId = null;
-            let finalSuperAdminId = superAdminId;
-
-            if (role === "admin") {
-                adminId = userId;
-            }
-
-            if (role === "cashier") {
-                adminId = req.user.adminId || null;
             }
 
            
             const bill = await Bill.create({
+
                 items,
+
                 summary: {
                     subTotal,
                     totalGST,
@@ -111,31 +174,47 @@ router.post("/",verifyToken,authorize("super_admin", "admin", "cashier"),async (
                     grandTotal
                 },
 
-                createdBy: userId,
-                role,
+                customerId: customer
+                    ? customer._id
+                    : null,
 
-                adminId,
-                superAdminId: finalSuperAdminId
+                createdBy: req.user.userId,
+                role: req.user.role,
+
+                
+                superAdminId: hierarchy.superAdminId
             });
 
-            return successResponse(res, {
-                billId: bill._id,
-                items,
-                summary: bill.summary,
-                loyalty: {
-                    used: redeemPoints,
-                    earned: earnedPoints,
-                    remaining: customer ? customer.loyaltyPoints : 0
-                }
-            }, "Bill generated successfully");
+            return successResponse(
+                res,
+                {
+                    billId: bill._id,
+                    items,
+                    summary: bill.summary,
+
+                    loyalty: {
+                        used: redeemPoints,
+                        earned: earnedPoints,
+                        remaining: customer
+                            ? customer.loyaltyPoints
+                            : 0
+                    }
+                },
+                "Bill generated successfully"
+            );
 
         } catch (err) {
-            console.error(err);
-            return errorResponse(res, "Server error", 500);
+
+            console.error("BILL ERROR:", err);
+
+            return res.status(500).json({
+                success: false,
+                message: "Server error",
+                error: err.message
+            });
         }
     }
 );
-
 
 router.get("/sales", verifyToken, authorize("super_admin"), async (req, res) => {
     try {
@@ -346,7 +425,6 @@ router.get("/print/:id", async (req, res) => {
         });
     }
 });
-
 
 
 

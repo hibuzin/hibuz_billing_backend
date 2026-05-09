@@ -23,6 +23,20 @@ const billSchema = new mongoose.Schema({
         grandTotal: Number
     },
 
+    superAdminId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+        index: true
+    },
+
+    adminId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+        index: true
+    },
+
     paymentMethod: {
         type: String,
         enum: ["cash", "card", "upi"],

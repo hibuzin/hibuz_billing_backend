@@ -1,14 +1,36 @@
 const mongoose = require("mongoose");
 
-const barcodeSchema = new mongoose.Schema({
-    productId: mongoose.Schema.Types.ObjectId,
-    code: {
-        type: String,
-        required: true,
-        trim: true,
-        unique: true
+const barcodeSchema = new mongoose.Schema(
+    {
+        productId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Product",
+            required: true
+        },
+
+        code: {
+            type: String,
+        
+            trim: true
+        },
+
+        isSold: {
+            type: Boolean,
+            default: false
+        },
+
+        superAdminId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true
+        }
     },
-    isSold: { type: Boolean, default: false }
-});
+    { timestamps: true }
+);
+
+barcodeSchema.index(
+    { code: 1, superAdminId: 1 },
+    { unique: true }
+);
 
 module.exports = mongoose.model("Barcode", barcodeSchema);

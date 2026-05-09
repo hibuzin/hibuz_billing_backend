@@ -7,6 +7,12 @@ const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 const user = require("../models/user");
 const Counter = require("../models/Counter");
+const { attachHierarchy } = require("../utils/hierarchy");
+
+const multer = require("multer");
+const csv = require("csv-parser");
+const fs = require("fs");
+const upload = multer({ dest: "uploads/" });
 
 
 
@@ -22,12 +28,15 @@ const getNextCustomerId = async () => {
 
 
 
-router.post("/customers",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
+router.post(
+    "/customers",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    async (req, res) => {
         try {
             const { name, phone, email, address } = req.body;
-            const { userId, superAdminId, role } = req.user;
+            const { userId, role, superAdminId, adminId } = req.user;
 
-           
             if (!name || !phone) {
                 return res.status(400).json({
                     success: false,
@@ -35,13 +44,23 @@ router.post("/customers",verifyToken,authorize("super_admin", "admin", "cashier"
                 });
             }
 
+            let finalSuperAdminId = null;
+            let finalAdminId = null;
+
+            if (role === "super_admin") {
+                finalSuperAdminId = userId;
+
+            }
+
+            if (!finalSuperAdminId) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Invalid hierarchy"
+                });
+            }
+
             const cleanPhone = phone.trim();
 
-            
-            const finalSuperAdminId =
-                role === "super_admin" ? userId : superAdminId;
-
-           
             const existing = await Customer.findOne({
                 phone: cleanPhone,
                 superAdminId: finalSuperAdminId
@@ -62,8 +81,11 @@ router.post("/customers",verifyToken,authorize("super_admin", "admin", "cashier"
                 phone: cleanPhone,
                 email,
                 address,
+
                 createdBy: userId,
-                superAdminId: finalSuperAdminId
+                roleCreatedBy: role,
+                superAdminId: finalSuperAdminId,
+                adminId: finalAdminId
             });
 
             res.status(201).json({
@@ -84,17 +106,36 @@ router.post("/customers",verifyToken,authorize("super_admin", "admin", "cashier"
 
 
 
-router.get("/",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
+router.get(
+    "/customers",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    async (req, res) => {
         try {
-            const { superAdminId } = req.user;
+            const { page = 1, limit = 10, search = "" } = req.query;
+            const { role, superAdminId } = req.user;
 
-            const customers = await Customer.find({
-                superAdminId: superAdminId  
-            }).sort({ createdAt: -1 });
+            let filter = {
+                superAdminId: role === "super_admin" ? superAdminId : superAdminId
+            };
+
+
+            if (search) {
+                filter.name = { $regex: search, $options: "i" };
+            }
+
+            const customers = await Customer.find(filter)
+                .skip((page - 1) * limit)
+                .limit(Number(limit))
+                .sort({ createdAt: -1 });
+
+            const total = await Customer.countDocuments(filter);
 
             res.json({
                 success: true,
-                count: customers.length,
+                total,
+                page: Number(page),
+                pages: Math.ceil(total / limit),
                 data: customers
             });
 
@@ -108,15 +149,34 @@ router.get("/",verifyToken,authorize("super_admin", "admin", "cashier"),async (r
     }
 );
 
-
-router.get("/:customerId",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
+router.get(
+    "/customers/:id",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    async (req, res) => {
         try {
+            const { id } = req.params;
             const { superAdminId } = req.user;
-            const id = Number(req.params.customerId);
+
+            let filter = {};
+
+            
+            if (mongoose.Types.ObjectId.isValid(id)) {
+                filter._id = id;
+            } else {
+                filter.customerId = id;
+            }
+
+           
+            if (role === "super_admin") {
+                filter.superAdminId = userId;
+            } else {
+                filter.superAdminId = superAdminId;
+            }
 
             const customer = await Customer.findOne({
-                customerId: id,
-                superAdminId: superAdminId   
+                _id: id,
+                superAdminId: superAdminId
             });
 
             if (!customer) {
@@ -126,21 +186,9 @@ router.get("/:customerId",verifyToken,authorize("super_admin", "admin", "cashier
                 });
             }
 
-            const cleanCustomer = {
-                id: customer._id,
-                customerId: customer.customerId,
-                name: customer.name,
-                phone: customer.phone,
-                ...(customer.email && { email: customer.email }),
-                ...(customer.address && { address: customer.address }),
-                loyaltyPoints: customer.loyaltyPoints,
-                totalSpent: customer.totalSpent
-            };
-
             res.json({
                 success: true,
-                message: "Customer fetched successfully",
-                data: cleanCustomer
+                data: customer
             });
 
         } catch (err) {
@@ -154,14 +202,27 @@ router.get("/:customerId",verifyToken,authorize("super_admin", "admin", "cashier
 );
 
 
-router.put("/:id",verifyToken,authorize("super_admin", "admin", "cashier"),
+router.put(
+    "/customers/:id",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
-            const { superAdminId } = req.user;
+            const { userId, superAdminId } = req.user;
+            const { id } = req.params;
+            const { name, phone, email, address } = req.body;
 
+            if (!mongoose.Types.ObjectId.isValid(id)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid customer ID"
+                });
+            }
+
+          
             const customer = await Customer.findOne({
-                _id: req.params.id,
-                superAdminId: superAdminId  
+                _id: id,
+                superAdminId: superAdminId
             });
 
             if (!customer) {
@@ -171,14 +232,13 @@ router.put("/:id",verifyToken,authorize("super_admin", "admin", "cashier"),
                 });
             }
 
-           
-            const allowedFields = ["name", "phone", "email", "address"];
+            
+            if (name) customer.name = name.trim();
+            if (phone) customer.phone = phone.trim();
+            if (email) customer.email = email.toLowerCase();
+            if (address !== undefined) customer.address = address;
 
-            allowedFields.forEach((field) => {
-                if (req.body[field] !== undefined) {
-                    customer[field] = req.body[field];
-                }
-            });
+            customer.lastUpdatedBy = userId;
 
             await customer.save();
 
@@ -199,17 +259,28 @@ router.put("/:id",verifyToken,authorize("super_admin", "admin", "cashier"),
 );
 
 
-router.delete("/:id",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
+router.delete(
+    "/customers/:id",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    async (req, res) => {
         try {
             const { superAdminId } = req.user;
-            const id = Number(req.params.id);
+            const { id } = req.params;
 
-            const customer = await Customer.findOneAndDelete({
-                customerId: id,
-                superAdminId: superAdminId   
+            if (!mongoose.Types.ObjectId.isValid(id)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid customer ID"
+                });
+            }
+
+            const deleted = await Customer.findOneAndDelete({
+                _id: id,
+                superAdminId: superAdminId
             });
 
-            if (!customer) {
+            if (!deleted) {
                 return res.status(404).json({
                     success: false,
                     message: "Customer not found or not authorized"
@@ -232,154 +303,104 @@ router.delete("/:id",verifyToken,authorize("super_admin", "admin", "cashier"),as
 );
 
 
-
-router.post("/loyalty/add",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
+router.get(
+    "/customers/export",
+    verifyToken,
+    authorize("super_admin", "admin"),
+    async (req, res) => {
         try {
-            const { customerId, amount } = req.body;
-            const { userId, superAdminId } = req.user;
+            const { userId, role, superAdminId } = req.user;
 
-            const amountNum = Number(amount);
+            const finalSuperAdminId =
+                role === "super_admin" ? userId : superAdminId;
 
-            if (!amountNum || amountNum <= 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid amount"
-                });
-            }
-
-            
-            const customer = await Customer.findOne({
-                customerId,
-                superAdminId: superAdminId
-            });
-
-            if (!customer) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Customer not found or not authorized"
-                });
-            }
-
-            const points = Math.floor(amountNum / 100);
-
-            customer.loyaltyPoints += points;
-            customer.totalSpent += amountNum;
-
-            
-            customer.lastUpdatedBy = userId;
-
-            await customer.save();
-
-            res.json({
-                success: true,
-                message: "Loyalty points added",
-                addedPoints: points,
-                totalPoints: customer.loyaltyPoints
-            });
-
-        } catch (err) {
-            res.status(500).json({
-                success: false,
-                message: "Server error",
-                error: err.message
-            });
-        }
-    }
-);
-
-
-
-router.post("/loyalty/redeem",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
-        try {
-            const { customerId, points } = req.body;
-            const { userId, superAdminId } = req.user;
-
-            const pointsNum = Number(points);
-
-            if (!pointsNum || pointsNum <= 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid points"
-                });
-            }
+            const customers = await Customer.find({
+                superAdminId: finalSuperAdminId
+            }).lean();
 
            
-            const customer = await Customer.findOne({
-                customerId,
-                superAdminId: superAdminId
+            let csv = "Name,Phone,Email,Address,Points,TotalSpent\n";
+
+
+            customers.forEach(c => {
+                csv += `${c.name || ""},${c.phone || ""},${c.email || ""},${c.address || ""},${c.loyaltyPoints || 0},${c.totalSpent || 0}\n`;
             });
 
-            if (!customer) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Customer not found or not authorized"
-                });
-            }
+            res.header("Content-Type", "text/csv");
+            res.attachment("customers.csv");
 
-            if (customer.loyaltyPoints < pointsNum) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Not enough loyalty points"
-                });
-            }
-
-            customer.loyaltyPoints -= pointsNum;
-
-           
-            customer.lastUpdatedBy = userId;
-
-            await customer.save();
-
-            res.json({
-                success: true,
-                message: "Points redeemed successfully",
-                discount: pointsNum,
-                remainingPoints: customer.loyaltyPoints
-            });
+            return res.send(csv);
 
         } catch (err) {
             res.status(500).json({
                 success: false,
-                message: "Server error",
-                error: err.message
+                message: err.message
             });
         }
     }
 );
 
 
-router.get("/loyalty/:customerId",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
+
+
+
+router.post(
+    "/customers/import",
+    verifyToken,
+    authorize("super_admin", "admin"),
+    upload.single("file"),
+    async (req, res) => {
         try {
-            const { superAdminId } = req.user;
+            const { userId, role, superAdminId } = req.user;
 
-            const customer = await Customer.findOne({
-                customerId: req.params.customerId,
-                superAdminId: superAdminId  
-            });
+            const finalSuperAdminId =
+                role === "super_admin" ? userId : superAdminId;
 
-            if (!customer) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Customer not found or not authorized"
+            const results = [];
+
+            fs.createReadStream(req.file.path)
+                .pipe(csv())
+                .on("data", (data) => results.push(data))
+                .on("end", async () => {
+
+                    const bulk = results.map(item => ({
+                        insertOne: {
+                            document: {
+                                name: item.Name,
+                                phone: item.Phone,
+                                email: item.Email,
+                                address: item.Address,
+                                loyaltyPoints: Number(item.Points) || 0,
+                                totalSpent: Number(item.TotalSpent) || 0,
+                                superAdminId: finalSuperAdminId,
+                                createdBy: userId
+                            }
+                        }
+                    }));
+
+                    if (bulk.length > 0) {
+                        await Customer.bulkWrite(bulk);
+                    }
+
+                    
+                    fs.unlinkSync(req.file.path);
+
+                    res.json({
+                        success: true,
+                        message: `${bulk.length} customers imported`
+                    });
                 });
-            }
-
-            res.json({
-                success: true,
-                customerId: customer.customerId,
-                name: customer.name,
-                loyaltyPoints: customer.loyaltyPoints,
-                totalSpent: customer.totalSpent
-            });
 
         } catch (err) {
             res.status(500).json({
                 success: false,
-                message: "Server error",
-                error: err.message
+                message: err.message
             });
         }
     }
 );
+
+
+
 
 module.exports = router;

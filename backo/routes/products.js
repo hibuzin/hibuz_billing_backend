@@ -4,6 +4,8 @@ const Product = require("../models/Product");
 const Barcode = require("../models/Barcode");
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
+const { attachHierarchy } = require("../utils/hierarchy");
+const Category = require("../models/category");
 
 
 const generateBarcode = () => {
@@ -26,63 +28,120 @@ const generateUniqueBarcodes = async (count) => {
     return [...codes];
 };
 
-router.post("/",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
+router.post(
+    "/",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    async (req, res) => {
         try {
             const {
                 name,
                 sellingPrice,
-                gst,
+                costPrice = 0,
+                gst = 0,
                 stock,
-                barcodeCount
+                barcodeCount,
+                categoryId,
+                unitType = "piece",
+                unitValue = 1,
+                reorderLevel = 0
             } = req.body;
 
-            const { userId, role, superAdminId } = req.user;
-
-            
-            if (!name || !sellingPrice || !stock) {
+            if (!name || !sellingPrice || stock === undefined || !categoryId) {
                 return res.status(400).json({
                     success: false,
-                    message: "Name, sellingPrice, and stock are required"
+                    message: "Name, sellingPrice, stock, and categoryId are required"
                 });
             }
 
-            
-            if (!superAdminId) {
-                return res.status(403).json({
-                    success: false,
-                    message: "superAdminId missing in token"
-                });
-            }
+            const hierarchy = attachHierarchy(req.user);
+            const productName = name.trim();
 
-            
-            const product = await Product.create({
-                name,
-                sellingPrice,
-                gst,
-                stock,
-
-                createdBy: userId,
-                roleCreatedBy: role,
-                superAdminId: superAdminId
+           
+            const category = await Category.findOne({
+                _id: categoryId,
+                superAdminId: hierarchy.superAdminId
             });
 
-            const count = barcodeCount || stock;
+            if (!category) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Category not found"
+                });
+            }
 
-            const barcodes = await generateUniqueBarcodes(count);
+           
+            const existingProduct = await Product.findOne({
+                name: productName,
+                superAdminId: hierarchy.superAdminId
+            });
 
-            const barcodeDocs = barcodes.map(code => ({
-                productId: product._id,
-                code,
-                isSold: false,
-                superAdminId: superAdminId   
-            }));
+            if (existingProduct) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Product already exists"
+                });
+            }
 
-            await Barcode.insertMany(barcodeDocs);
+            const stockNumber = Number(stock);
+            const sellingPriceNumber = Number(sellingPrice);
+            const costPriceNumber = Number(costPrice);
+            const gstNumber = Number(gst);
+            const barcodeTotal = barcodeCount ? Number(barcodeCount) : stockNumber;
+
+            if (
+                isNaN(stockNumber) ||
+                isNaN(sellingPriceNumber) ||
+                isNaN(costPriceNumber) ||
+                isNaN(gstNumber) ||
+                stockNumber < 0 ||
+                sellingPriceNumber <= 0 ||
+                barcodeTotal < 0
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid numeric values"
+                });
+            }
+
+           
+            const product = await Product.create({
+                name: productName,
+                costPrice: costPriceNumber,
+                sellingPrice: sellingPriceNumber,
+                gst: gstNumber,
+                stock: stockNumber,
+                categoryId,
+                unitType,
+                unitValue: Number(unitValue) || 1,
+                reorderLevel: Number(reorderLevel) || 0,
+                damagedStock: 0,
+                ...hierarchy
+            });
+
+           
+            let barcodes = [];
+
+            if (barcodeTotal > 0) {
+                barcodes = await generateUniqueBarcodes(
+                    barcodeTotal,
+                    hierarchy.superAdminId
+                );
+
+                const barcodeDocs = barcodes.map(code => ({
+                    productId: product._id,
+                    code,
+                    isSold: false,
+                    superAdminId: hierarchy.superAdminId
+                }));
+
+                await Barcode.insertMany(barcodeDocs);
+            }
 
             res.status(201).json({
                 success: true,
                 message: "Product created successfully",
-                product,
+                data: product,
                 totalBarcodes: barcodes.length,
                 barcodes
             });
@@ -99,211 +158,268 @@ router.post("/",verifyToken,authorize("super_admin", "admin", "cashier"),async (
 
 
 
-router.get("/",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
-        try {
-            const { page = 1, limit = 10, search = "" } = req.query;
-            const { superAdminId } = req.user;
 
-            const query = {
-                superAdminId: superAdminId,   
-                name: { $regex: search, $options: "i" }
-            };
+router.get("/", verifyToken, authorize("super_admin", "admin", "cashier"), async (req, res) => {
+    try {
+        const { page = 1, limit = 10, search = "" } = req.query;
+        const { userId, role, superAdminId, adminId } = req.user;
 
-            const products = await Product.find(query)
-                .skip((page - 1) * limit)
-                .limit(Number(limit))
-                .sort({ createdAt: -1 });
 
-            const total = await Product.countDocuments(query);
+        let filter = {
+            name: { $regex: search, $options: "i" }
+        };
 
-            res.json({
-                success: true,
-                total,
-                page: Number(page),
-                pages: Math.ceil(total / limit),
-                products
-            });
-
-        } catch (err) {
-            res.status(500).json({
-                success: false,
-                message: "Server error",
-                error: err.message
-            });
+        if (role === "super_admin") {
+            filter.superAdminId = userId;
         }
+
+        else if (role === "admin") {
+            filter.superAdminId = superAdminId;
+
+        }
+
+        else if (role === "cashier") {
+            filter.superAdminId = superAdminId;
+
+        }
+
+        const products = await Product.find(query)
+            .skip((page - 1) * limit)
+            .limit(Number(limit))
+            .sort({ createdAt: -1 });
+
+        const total = await Product.countDocuments(query);
+
+        res.json({
+            success: true,
+            total,
+            page: Number(page),
+            pages: Math.ceil(total / limit),
+            products
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
     }
+}
 );
 
 
-router.get("/:id",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
-        try {
-            const { superAdminId } = req.user;
+router.get("/:id", verifyToken, authorize("super_admin", "admin", "cashier"), async (req, res) => {
+    try {
+        const { userId, role, superAdminId, adminId } = req.user;
 
-            const product = await Product.findOne({
-                _id: req.params.id,
-                superAdminId: superAdminId  
-            });
 
-            if (!product) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Product not found"
-                });
-            }
+        let filter = { _id: req.params.id };
 
-            res.json({
-                success: true,
-                product
-            });
+        if (role === "super_admin") {
+            filter.superAdminId = userId;
+        }
 
-        } catch (err) {
-            res.status(500).json({
+        else if (role === "admin") {
+            filter.superAdminId = superAdminId;
+
+        }
+
+        else if (role === "cashier") {
+            filter.superAdminId = superAdminId;
+
+        }
+
+        const product = await Product.findOne(filter);
+
+        if (!product) {
+            return res.status(404).json({
                 success: false,
-                message: "Server error",
-                error: err.message
+                message: "Product not found"
             });
         }
+
+        res.json({
+            success: true,
+            product
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
     }
+}
 );
 
-router.put("/:id",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
-        try {
-            const { name, price, gst, stock } = req.body;
-            const { superAdminId } = req.user;
+router.put("/:id", verifyToken, authorize("super_admin", "admin", "cashier"), async (req, res) => {
+    try {
+        const {
+            name,
+            sellingPrice,
+            gst,
+            stock, } = req.body;
+        const { userId, role, superAdminId, adminId } = req.user;
 
-            
-            const product = await Product.findOne({
-                _id: req.params.id,
-                superAdminId: superAdminId
-            });
 
-            if (!product) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Product not found"
-                });
-            }
+        let filter = { _id: req.params.id };
 
-           
-            if (price !== undefined && (isNaN(price) || price <= 0)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Price must be a valid number"
-                });
-            }
+        if (role === "super_admin") {
+            filter.superAdminId = userId;
+        } else if (role === "admin") {
+            filter.superAdminId = superAdminId;
 
-            if (gst !== undefined && (isNaN(gst) || gst < 0)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "GST must be a valid number"
-                });
-            }
 
-            if (stock !== undefined && (isNaN(stock) || stock < 0)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Stock must be a valid number"
-                });
-            }
+        } else if (role === "cashier") {
+            filter.superAdminId = superAdminId;
 
-            
-            if (name !== undefined) product.name = name;
-            if (price !== undefined) product.price = Number(price);
-            if (gst !== undefined) product.gst = Number(gst);
+        }
 
-            let newBarcodes = [];
+        const product = await Product.findOne(filter);
 
-            if (stock !== undefined) {
-                const newStock = Number(stock);
-                const oldStock = product.stock;
-
-                const diff = newStock - oldStock;
-
-                if (diff > 0) {
-                    const codes = await generateBarcodes(diff);
-
-                    newBarcodes = codes;
-
-                    const barcodeDocs = codes.map(code => ({
-                        productId: product._id,
-                        code,
-                        isSold: false,
-                        superAdminId: superAdminId   
-                    }));
-
-                    await Barcode.insertMany(barcodeDocs);
-                }
-
-                product.stock = newStock;
-            }
-
-            await product.save();
-
-            const barcodes = await Barcode.find({
-                productId: product._id
-            }).sort({ _id: -1 }).limit(5);
-
-            return res.json({
-                success: true,
-                message: "Product updated successfully",
-                product,
-                newBarcodes
-            });
-
-        } catch (err) {
-            console.error(err);
-            return res.status(500).json({
+        if (!product) {
+            return res.status(404).json({
                 success: false,
-                message: "Server error",
-                error: err.message
+                message: "Product not found"
             });
         }
+
+
+        if (price !== undefined && (isNaN(price) || price <= 0)) {
+            return res.status(400).json({
+                success: false,
+                message: "Price must be a valid number"
+            });
+        }
+
+        if (gst !== undefined && (isNaN(gst) || gst < 0)) {
+            return res.status(400).json({
+                success: false,
+                message: "GST must be a valid number"
+            });
+        }
+
+        if (stock !== undefined && (isNaN(stock) || stock < 0)) {
+            return res.status(400).json({
+                success: false,
+                message: "Stock must be a valid number"
+            });
+        }
+
+
+        if (name !== undefined) product.name = name;
+        if (price !== undefined) product.price = Number(price);
+        if (gst !== undefined) product.gst = Number(gst);
+
+        let newBarcodes = [];
+
+        if (stock !== undefined) {
+            const newStock = Number(stock);
+            const oldStock = product.stock;
+
+            const diff = newStock - oldStock;
+
+            if (diff > 0) {
+                const codes = await generateBarcodes(diff);
+
+                newBarcodes = codes;
+
+                const barcodeDocs = codes.map(code => ({
+                    productId: product._id,
+                    code,
+                    isSold: false,
+                    superAdminId: superAdminId
+                }));
+
+                await Barcode.insertMany(barcodeDocs);
+            }
+
+            product.stock = newStock;
+        }
+
+        await product.save();
+
+        const barcodes = await Barcode.find({
+            productId: product._id
+        }).sort({ _id: -1 }).limit(5);
+
+        return res.json({
+            success: true,
+            message: "Product updated successfully",
+            product,
+            newBarcodes
+        });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
     }
+}
 );
 
-router.delete("/:id",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
-        try {
-            const { superAdminId } = req.user;
-            const productId = req.params.id;
+router.delete("/:id", verifyToken, authorize("super_admin", "admin", "cashier"), async (req, res) => {
+    try {
+        const { userId, role, superAdminId, adminId } = req.user;
 
-            
-            const product = await Product.findOne({
-                _id: productId,
-                superAdminId: superAdminId
-            });
 
-            if (!product) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Product not found"
-                });
-            }
+        let filter = { _id: req.params.id };
 
-           
-            await Barcode.deleteMany({
-                productId: productId,
-                superAdminId: superAdminId
-            });
+        if (role === "super_admin") {
+            filter.superAdminId = userId;
+        }
+        else if (role === "admin") {
+            filter.superAdminId = superAdminId;
 
-            
-            await Product.deleteOne({
-                _id: productId,
-                superAdminId: superAdminId
-            });
 
-            res.status(200).json({
-                success: true,
-                message: "Product and related barcodes deleted successfully"
-            });
+        }
+        else if (role === "cashier") {
+            filter.superAdminId = superAdminId;
 
-        } catch (err) {
-            res.status(500).json({
+
+        }
+
+
+        const product = await Product.findOne(filter);
+
+
+        if (!product) {
+            return res.status(404).json({
                 success: false,
-                message: "Server error",
-                error: err.message
+                message: "Product not found"
             });
         }
+
+
+        await Barcode.deleteMany({
+            productId: productId,
+            superAdminId: superAdminId
+        });
+
+
+        await Product.deleteOne({
+            _id: productId,
+            superAdminId: superAdminId
+        });
+
+        res.status(200).json({
+            success: true,
+            message: "Product and related barcodes deleted successfully"
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
     }
+}
 );
 
 

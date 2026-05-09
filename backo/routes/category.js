@@ -1,23 +1,14 @@
+const mongoose = require("mongoose");
 const express = require("express");
 const router = express.Router();
-
-const Supplier = require("../models/Supplier");
-const Counter = require("../models/Counter");
-
+const User = require("../models/user");
+const Category = require("../models/category");
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 const { attachHierarchy } = require("../utils/hierarchy");
 
 
-const getNextSupplierId = async () => {
-    const counter = await Counter.findOneAndUpdate(
-        { name: "supplier" },
-        { $inc: { seq: 1 } },
-        { new: true, upsert: true }
-    );
 
-    return counter.seq;
-};
 
 router.post(
     "/",
@@ -25,47 +16,41 @@ router.post(
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
-            const { name, phone, email, address } = req.body;
+            const { name } = req.body;
 
-            if (!name || !phone) {
+            if (!name) {
                 return res.status(400).json({
                     success: false,
-                    message: "Name and phone required"
+                    message: "Category name required"
                 });
             }
 
             const hierarchy = attachHierarchy(req.user);
 
 
-            const existing = await Supplier.findOne({
-                phone,
+            const exists = await Category.findOne({
+                name: name.trim(),
                 superAdminId: hierarchy.superAdminId
             });
 
-            if (existing) {
+            if (exists) {
                 return res.status(400).json({
                     success: false,
-                    message: "Supplier already exists"
+                    message: "Category already exists"
                 });
             }
 
-            const supplierId = await getNextSupplierId();
-
-            const supplier = await Supplier.create({
-                supplierId,
-                name,
-                phone,
-                email,
-                address,
-                superAdminId: hierarchy.superAdminId,
-                adminId: hierarchy.adminId,
-                createdBy: hierarchy.createdBy
+            const category = await Category.create({
+                name: name.trim(),
+                ...hierarchy,
+                createdBy: req.user.userId,
+                roleCreatedBy: req.user.role
             });
 
             res.status(201).json({
                 success: true,
-                message: "Supplier created successfully",
-                supplier
+                message: "Category created successfully",
+                data: category
             });
 
         } catch (err) {
@@ -77,7 +62,6 @@ router.post(
         }
     }
 );
-
 
 
 router.get(
@@ -86,16 +70,20 @@ router.get(
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
+
             const hierarchy = attachHierarchy(req.user);
 
-            const suppliers = await Supplier.find({
+           
+            const categories = await Category.find({
                 superAdminId: hierarchy.superAdminId
-            }).sort({ createdAt: -1 });
+            }).sort({
+                createdAt: -1
+            });
 
             res.json({
                 success: true,
-                count: suppliers.length,
-                data: suppliers
+                count: categories.length,
+                data: categories
             });
 
         } catch (err) {
@@ -107,7 +95,6 @@ router.get(
         }
     }
 );
-
 
 
 router.get(
@@ -116,24 +103,27 @@ router.get(
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
+
             const { id } = req.params;
+
             const hierarchy = attachHierarchy(req.user);
 
-            const supplier = await Supplier.findOne({
+            
+            const category = await Category.findOne({
                 _id: id,
                 superAdminId: hierarchy.superAdminId
             });
 
-            if (!supplier) {
+            if (!category) {
                 return res.status(404).json({
                     success: false,
-                    message: "Supplier not found"
+                    message: "Category not found"
                 });
             }
 
             res.json({
                 success: true,
-                data: supplier
+                data: category
             });
 
         } catch (err) {
@@ -145,67 +135,55 @@ router.get(
         }
     }
 );
-
 
 
 
 router.put(
     "/:id",
     verifyToken,
-    authorize("super_admin", "admin", "cashier"),
+    authorize("super_admin", "admin"),
     async (req, res) => {
         try {
-            const { id } = req.params;
 
-            const {
-                name,
-                phone,
-                email,
-                address
-            } = req.body;
+            const { id } = req.params;
+            const { name } = req.body;
+
+            if (!name) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Category name required"
+                });
+            }
 
             const hierarchy = attachHierarchy(req.user);
 
-           
-            const supplier = await Supplier.findOne({
-                _id: id,
-                superAdminId: hierarchy.superAdminId
-            });
+            
+            const category = await Category.findOneAndUpdate(
+                {
+                    _id: id,
+                    superAdminId: hierarchy.superAdminId
+                },
+                {
+                    $set: {
+                        name: name.trim()
+                    }
+                },
+                {
+                    new: true
+                }
+            );
 
-            if (!supplier) {
+            if (!category) {
                 return res.status(404).json({
                     success: false,
-                    message: "Supplier not found"
+                    message: "Category not found"
                 });
             }
-
-           
-            if (phone) {
-                const existingSupplier = await Supplier.findOne({
-                    phone,
-                    superAdminId: hierarchy.superAdminId,
-                    _id: { $ne: id }
-                });
-
-                if (existingSupplier) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Phone number already used by another supplier"
-                    });
-                }
-            }
-
-            supplier.name = name || supplier.name;
-            supplier.phone = phone || supplier.phone;
-            supplier.email = email || supplier.email;
-            supplier.address = address || supplier.address;
-
-            await supplier.save();
 
             res.json({
                 success: true,
-                message: "Supplier updated successfully",
-                data: supplier
+                message: "Category updated successfully",
+                data: category
             });
 
         } catch (err) {
@@ -219,26 +197,35 @@ router.put(
 );
 
 
-router.delete("/:id",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
+
+router.delete(
+    "/:id",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    async (req, res) => {
         try {
+
             const { id } = req.params;
+
             const hierarchy = attachHierarchy(req.user);
 
-            const supplier = await Supplier.findOneAndDelete({
+           
+            const deleted = await Category.findOneAndDelete({
                 _id: id,
                 superAdminId: hierarchy.superAdminId
             });
 
-            if (!supplier) {
+            if (!deleted) {
                 return res.status(404).json({
                     success: false,
-                    message: "Supplier not found"
+                    message: "Category not found"
                 });
             }
 
             res.json({
                 success: true,
-                message: "Supplier deleted successfully"
+                message: "Category deleted successfully",
+                deletedId: deleted._id
             });
 
         } catch (err) {
@@ -252,4 +239,3 @@ router.delete("/:id",verifyToken,authorize("super_admin", "admin", "cashier"),as
 );
 
 module.exports = router;
-

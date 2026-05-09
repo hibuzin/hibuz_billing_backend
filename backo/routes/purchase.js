@@ -5,9 +5,12 @@ const mongoose = require("mongoose");
 const Purchase = require("../models/Purchase");
 const Product = require("../models/Product");
 const Counter = require("../models/Counter");
-
+const { attachHierarchy } = require("../utils/hierarchy");
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
+const Supplier = require("../models/Supplier");
+
+
 
 
 const getNextPurchaseId = async () => {
@@ -21,34 +24,55 @@ const getNextPurchaseId = async () => {
 };
 
 
-router.post("/",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
+router.post(
+    "/purchase",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    async (req, res) => {
         try {
             const { supplierId, items } = req.body;
-            const { userId, role, superAdminId } = req.user;
 
-            if (!supplierId || !items || items.length === 0) {
+            if (!supplierId || !Array.isArray(items) || items.length === 0) {
                 return res.status(400).json({
                     success: false,
-                    message: "Supplier and items are required",
+                    message: "Supplier and items are required"
                 });
             }
 
+            const hierarchy = attachHierarchy(req.user);
+
             let totalAmount = 0;
+            const processedItems = [];
 
-            for (const item of items) {
-                const { productId, qty, costPrice } = item;
+            
+            const supplier = await Supplier.findOne({
+                _id: supplierId,
+                superAdminId: hierarchy.superAdminId
+            });
 
-                if (!productId || qty <= 0 || costPrice < 0) {
+            if (!supplier) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Supplier not found"
+                });
+            }
+
+            for (let item of items) {
+
+                const productId = item.productId;
+                const qty = Number(item.qty);
+                const costPrice = Number(item.costPrice);
+
+                if (isNaN(qty) || qty <= 0) {
                     return res.status(400).json({
                         success: false,
-                        message: "Invalid item data",
+                        message: "Invalid quantity"
                     });
                 }
 
-                
                 const product = await Product.findOne({
                     _id: productId,
-                    superAdminId: superAdminId
+                    superAdminId: hierarchy.superAdminId
                 });
 
                 if (!product) {
@@ -60,68 +84,35 @@ router.post("/",verifyToken,authorize("super_admin", "admin", "cashier"),async (
 
                 totalAmount += qty * costPrice;
 
-                
-                await Product.updateOne(
-                    {
-                        _id: productId,
-                        superAdminId: superAdminId
-                    },
-                    {
-                        $inc: { stock: qty }
-                    }
-                );
+                const receivedQty = 0;
+                const pendingQty = qty;
+
+                processedItems.push({
+                    productId,
+                    qty,
+                    costPrice,
+                    receivedQty,
+                    pendingQty
+                });
             }
 
-            const purchaseId = await getNextPurchaseId();
-
             const purchase = await Purchase.create({
-                purchaseId,
+
                 supplierId,
-                items,
+                items: processedItems,
                 totalAmount,
-
-                createdBy: userId,
-                role,
-
-                superAdminId: superAdminId
+                status: "pending",
+                ...hierarchy
             });
 
-            res.status(201).json({
+            return res.status(201).json({
                 success: true,
                 message: "Purchase created successfully",
-                purchase
+                data: purchase
             });
 
         } catch (err) {
-            res.status(500).json({
-                success: false,
-                message: "Server error",
-                error: err.message,
-            });
-        }
-    }
-);
-
-
-router.get("/",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
-        try {
-            const { superAdminId } = req.user;
-
-            const data = await Purchase.find({
-                superAdminId: superAdminId   
-            })
-                .populate("supplierId")
-                .populate("items.productId")
-                .sort({ createdAt: -1 });
-
-            res.json({
-                success: true,
-                count: data.length,
-                data
-            });
-
-        } catch (err) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: "Server error",
                 error: err.message
@@ -130,36 +121,227 @@ router.get("/",verifyToken,authorize("super_admin", "admin", "cashier"),async (r
     }
 );
 
-router.get("/:id",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
+
+
+
+router.get(
+    "/purchase",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    async (req, res) => {
         try {
             const { superAdminId } = req.user;
 
-            const data = await Purchase.findOne({
-                _id: req.params.id,
-                superAdminId: superAdminId   
+            const purchases = await Purchase.find({
+                superAdminId: superAdminId
             })
                 .populate("supplierId")
-                .populate("items.productId");
+                .sort({ createdAt: -1 });
 
-            if (!data) {
+            const totalPurchases = purchases.length;
+
+
+            const totalAmount = purchases.reduce(
+                (sum, p) => sum + (p.totalAmount || 0),
+                0
+            );
+
+
+            const totalItems = purchases.reduce(
+                (sum, p) => sum + (p.items?.length || 0),
+                0
+            );
+
+            res.json({
+                success: true,
+                data: purchases,
+
+
+                count: {
+                    totalPurchases,
+                    totalAmount,
+                    totalItems
+                }
+            });
+
+        } catch (err) {
+            res.status(500).json({
+                success: false,
+                message: err.message
+            });
+        }
+    }
+);
+
+
+
+router.get("/purchase/:id", verifyToken, authorize("super_admin", "admin", "cashier"), async (req, res) => {
+    try {
+        const { superAdminId } = req.user;
+
+        const data = await Purchase.findOne({
+            _id: req.params.id,
+            superAdminId: superAdminId
+        })
+            .populate("supplierId")
+            .populate("items.productId");
+
+        if (!data) {
+            return res.status(404).json({
+                success: false,
+                message: "Purchase not found"
+            });
+        }
+
+        res.json({
+            success: true,
+            data
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+}
+);
+
+
+
+router.put(
+    "/purchase/:id/ack",
+    verifyToken,
+    authorize("super_admin", "admin"),
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { superAdminId } = req.user;
+
+
+            if (!mongoose.Types.ObjectId.isValid(id)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid purchase id"
+                });
+            }
+
+
+            const purchase = await Purchase.findOne({
+                _id: id,
+                superAdminId
+            });
+
+            if (!purchase) {
                 return res.status(404).json({
                     success: false,
                     message: "Purchase not found"
                 });
             }
 
-            res.json({
+
+            purchase.status = "acknowledged";
+            await purchase.save();
+
+            return res.json({
                 success: true,
-                data
+                message: "Purchase acknowledged successfully",
+                data: purchase
             });
 
         } catch (err) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: "Server error",
                 error: err.message
             });
         }
+    }
+);
+
+
+
+router.post("/purchase/:id/return", verifyToken, authorize("super_admin", "admin"), async (req, res) => {
+
+    const purchase = await Purchase.findOne({
+        _id: req.params.id,
+        superAdminId: req.user.superAdminId
+    });
+
+    if (!purchase) return res.status(404).json({ message: "Not found" });
+
+    purchase.status = "returned";
+
+
+    for (let item of purchase.items) {
+        await Product.updateOne(
+            { _id: item.productId },
+            { $inc: { stock: -item.qty } }
+        );
+    }
+
+    await purchase.save();
+
+    res.json({ success: true });
+}
+);
+
+
+
+
+router.get(
+    "/purchase/reorder",
+    verifyToken,
+    authorize("super_admin", "admin"),
+    async (req, res) => {
+        try {
+            const { superAdminId } = req.user;
+
+            const products = await Product.find({
+                superAdminId,
+                $expr: { $lte: ["$stock", "$reorderLevel"] }
+            });
+
+            const result = products.map(p => ({
+                productId: p._id,
+                name: p.name,
+                stock: p.stock,
+                reorderLevel: p.reorderLevel,
+                reorderQty: p.reorderLevel - p.stock
+            }));
+
+            res.json({
+                success: true,
+                count: result.length,
+                data: result
+            });
+
+        } catch (err) {
+            res.status(500).json({
+                success: false,
+                message: err.message
+            });
+        }
+    }
+);
+
+
+
+
+
+
+router.get(
+    "/purchase/:id/barcodes",
+    verifyToken,
+    async (req, res) => {
+        const purchase = await Purchase.findById(req.params.id);
+
+        const barcodes = await Barcode.find({
+            productId: { $in: purchase.items.map(i => i.productId) }
+        });
+
+        res.json({ success: true, barcodes });
     }
 );
 

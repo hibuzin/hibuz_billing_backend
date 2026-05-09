@@ -18,7 +18,7 @@ const customerSchema = new mongoose.Schema(
         phone: {
             type: String,
             required: true
-            
+
         },
 
         email: {
@@ -46,9 +46,24 @@ const customerSchema = new mongoose.Schema(
             default: 0,
         },
 
+        superAdminId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true
+        },
+
+        adminId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User"
+        },
+
         createdBy: {
-            type: mongoose.Schema.Types.ObjectId
-            
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User"
+        },
+
+        roleCreatedBy: {
+            type: String
         },
     },
 

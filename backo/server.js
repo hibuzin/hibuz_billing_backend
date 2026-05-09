@@ -4,11 +4,11 @@ require("dotenv").config();
 const cors = require("cors");
 const app = express();
 
-app.use(cors());
 app.use(cors({
-  origin: ["http://localhost:5000", "http://192.168.31.181:5000"],
+  origin: true,
   credentials: true
-})); 
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -23,6 +23,14 @@ const billRoutes = require("./routes/bill");
 const customerRoutes = require("./routes/customer");
 const purchaseRoutes = require("./routes/purchase");
 const supplierRoutes = require("./routes/supplier");
+const categoryRoutes = require("./routes/category");
+const loyaltyRoutes = require("./routes/loyalty");
+const DamageRoutes = require("./routes/Damage");
+const GRNRoutes = require("./routes/GRN");
+const returnRoutes = require("./routes/return");
+const reorderRoutes = require("./routes/reorder");
+const barcodePrintRoutes = require("./routes/barcodePrint");
+const StockRebillingRoutes = require("./routes/StockRebilling");
 
 
 
@@ -35,7 +43,16 @@ app.use("/api/supplier", supplierRoutes);
 app.use("/api/scan", scanRoutes);
 app.use("/api/bill", billRoutes);
 app.use("/api/customer", customerRoutes);
-app.use("/api/purchase",purchaseRoutes);
+app.use("/api/purchase", purchaseRoutes);
+app.use("/api/category", categoryRoutes);
+app.use("/api/loyalty", loyaltyRoutes);
+app.use("/api/Damage", DamageRoutes);
+app.use("/api/GRN", GRNRoutes);
+app.use("/api/return", returnRoutes);
+app.use("/api", reorderRoutes);
+app.use("/api", barcodePrintRoutes);
+app.use("/api", StockRebillingRoutes);
+
 
 
 app.get("/", (req, res) => {
