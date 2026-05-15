@@ -1,10 +1,13 @@
 const express = require("express");
 const router = express.Router();
+
+const mongoose = require("mongoose");
 const Product = require("../models/Product");
 const Barcode = require("../models/Barcode");
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 const category = require("../models/category");
+const Hsn = require("../models/Hsn");
 const { attachHierarchy } = require("../utils/hierarchy");
 
 
@@ -18,23 +21,12 @@ router.post(
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
-            const {
-                name,
-                costPrice,
-                sellingPrice,
-                categoryId,
-                stock,
-                gst,
-                unitType,
-                unitValue
-            } = req.body;
+            const { name, brand, categoryId, flavor, liters, mrps, hsnId } = req.body;
 
-            const code = String(req.body.code || req.body.barcode || "").trim();
-
-            if (!name || !sellingPrice || !categoryId || !unitType || !code) {
+            if (!name || !categoryId) {
                 return res.status(400).json({
                     success: false,
-                    message: "Required fields missing"
+                    message: "Name and category are required"
                 });
             }
 
@@ -52,44 +44,115 @@ router.post(
                 });
             }
 
-            const exists = await Barcode.findOne({
-                code,
-                superAdminId: hierarchy.superAdminId
-            });
+            let hsnData = null;
 
-            if (exists) {
+            if (hsnId) {
+                hsnData = await Hsn.findOne({
+                    _id: hsnId,
+                    superAdminId: hierarchy.superAdminId,
+                    isActive: true
+                });
+
+                if (!hsnData) {
+                    return res.status(404).json({
+                        success: false,
+                        message: "HSN not found"
+                    });
+                }
+            }
+
+            const processedFlavors = Array.isArray(flavor)
+                ? flavor.map(x => String(x).trim()).filter(Boolean)
+                : [];
+
+            const processedLiters = Array.isArray(liters)
+                ? liters.map(x => String(x).trim()).filter(Boolean)
+                : [];
+
+            const processedMrps = Array.isArray(mrps)
+                ? mrps.map(x => Number(x)).filter(x => !isNaN(x) && x > 0)
+                : [];
+
+            if (processedMrps.length === 0) {
                 return res.status(400).json({
                     success: false,
-                    message: "Barcode already exists"
+                    message: "At least one valid MRP is required"
                 });
             }
 
             const product = await Product.create({
-                name: name.trim(),
-                costPrice: costPrice ? Number(costPrice) : 0,
-                sellingPrice: Number(sellingPrice),
-                gst: gst ? Number(gst) : 0,
-                stock: stock ? Number(stock) : 0,
+                name: String(name).trim(),
+                brand: brand ? String(brand).trim() : "",
+                flavor: processedFlavors,
+                liters: processedLiters,
+                mrps: processedMrps,
 
                 categoryId,
-                unitType,
-                unitValue: unitValue ? Number(unitValue) : 1,
 
-                ...hierarchy
-            });
+                hsnId: hsnData ? hsnData._id : null,
+                hsnCode: hsnData ? hsnData.hsnCode : "",
+                gstRate: hsnData ? hsnData.gstRate : 0,
 
-            const barcode = await Barcode.create({
-                productId: product._id,
-                code,
-                isSold: false,
-                superAdminId: hierarchy.superAdminId
+                ...hierarchy,
+                createdBy: req.user.userId
             });
 
             res.status(201).json({
                 success: true,
                 message: "Product created successfully",
-                data: product,
-                barcode
+                data: product
+            });
+
+        } catch (err) {
+            if (err.code === 11000) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Product already exists"
+                });
+            }
+
+            res.status(500).json({
+                success: false,
+                message: "Server error",
+                error: err.message
+            });
+        }
+    }
+);
+
+router.get(
+    "/product-mrps/:productId",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    async (req, res) => {
+        try {
+            const { productId } = req.params;
+
+            const hierarchy = attachHierarchy(req.user);
+
+            const product = await Product.findOne({
+                _id: productId,
+                superAdminId: hierarchy.superAdminId
+            }).select("name brand flavor liters variants");
+
+            if (!product) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Product not found"
+                });
+            }
+
+            res.json({
+                success: true,
+                productId: product._id,
+                name: product.name,
+                brand: product.brand,
+                flavor: product.flavor,
+                size: product.size,
+                mrps: product.variants.map(v => ({
+                    variantId: v._id,
+                    mrp: v.mrp
+                }))
             });
 
         } catch (err) {
@@ -101,6 +164,8 @@ router.post(
         }
     }
 );
+
+
 
 
 router.get(
@@ -109,50 +174,18 @@ router.get(
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
-            const { page = 1, limit = 10, search = "" } = req.query;
-            const { userId, role, superAdminId, adminId } = req.user;
+            const hierarchy = attachHierarchy(req.user);
 
-
-
-            let finalSuperAdminId =
-                role === "super_admin" ? userId : superAdminId;
-
-            const query = {
-                superAdminId: finalSuperAdminId
-            };
-
-
-            if (search) {
-                query.name = { $regex: search, $options: "i" };
-            }
-
-            const products = await Product.find(query)
+            const products = await Product.find({
+                superAdminId: hierarchy.superAdminId
+            })
                 .populate("categoryId", "name")
-                .skip((Number(page) - 1) * Number(limit))
-                .limit(Number(limit))
-                .sort({ createdAt: -1 })
-                .lean();
-
-            for (let product of products) {
-                const barcodes = await Barcode.find({
-                    productId: product._id,
-                    superAdminId: finalSuperAdminId
-                }).select("code isSold -_id");
-
-                product.barcodes = barcodes;
-            }
-
-
-            const total = await Product.countDocuments(query);
+                .sort({ createdAt: -1 });
 
             res.json({
                 success: true,
-                total,
-                page: Number(page),
-                pages: Math.ceil(total / limit),
-                pages: Math.ceil(total / Number(limit)),
+                count: products.length,
                 data: products
-
             });
 
         } catch (err) {
@@ -164,6 +197,7 @@ router.get(
         }
     }
 );
+
 
 
 router.get(
@@ -173,18 +207,20 @@ router.get(
     async (req, res) => {
         try {
             const { id } = req.params;
-            const { userId, role, superAdminId } = req.user;
 
-            const finalSuperAdminId =
-                role === "super_admin" ? userId : superAdminId;
+            if (!mongoose.Types.ObjectId.isValid(id)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid product id"
+                });
+            }
 
-          
+            const hierarchy = attachHierarchy(req.user);
+
             const product = await Product.findOne({
                 _id: id,
-                superAdminId: finalSuperAdminId
-            })
-                .populate("categoryId", "name")
-                .lean();
+                superAdminId: hierarchy.superAdminId
+            }).populate("categoryId", "name");
 
             if (!product) {
                 return res.status(404).json({
@@ -192,13 +228,6 @@ router.get(
                     message: "Product not found"
                 });
             }
-
-            const barcodes = await Barcode.find({
-                productId: product._id,
-                superAdminId: finalSuperAdminId
-            }).select("code isSold -_id");
-
-            product.barcodes = barcodes;
 
             res.json({
                 success: true,
@@ -216,30 +245,25 @@ router.get(
 );
 
 
+
 router.put(
     "/:id",
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
-
             const { id } = req.params;
+            const { name, brand, categoryId, flavor, liters, mrps } = req.body;
 
-            const {
-                name,
-                costPrice,
-                sellingPrice,
-                categoryId,
-                gst,
-                stock,
-                unitType,
-                unitValue,
-                code
-            } = req.body;
+            if (!mongoose.Types.ObjectId.isValid(id)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid product id"
+                });
+            }
 
             const hierarchy = attachHierarchy(req.user);
 
-           
             const product = await Product.findOne({
                 _id: id,
                 superAdminId: hierarchy.superAdminId
@@ -252,7 +276,6 @@ router.put(
                 });
             }
 
-           
             if (categoryId) {
                 const cat = await category.findOne({
                     _id: categoryId,
@@ -269,46 +292,37 @@ router.put(
                 product.categoryId = categoryId;
             }
 
-           
-            if (code) {
+            if (name) product.name = String(name).trim();
+            if (brand !== undefined) product.brand = String(brand).trim();
 
-                const barcodeExists = await Barcode.findOne({
-                    code,
-                    productId: { $ne: product._id },
-                    superAdminId: hierarchy.superAdminId
-                });
+            if (Array.isArray(flavor)) {
+                product.flavor = flavor
+                    .map(x => String(x).trim())
+                    .filter(Boolean);
+            }
 
-                if (barcodeExists) {
+            if (Array.isArray(liters)) {
+                product.liters = liters
+                    .map(x => String(x).trim())
+                    .filter(Boolean);
+            }
+
+            if (Array.isArray(mrps)) {
+                const processedMrps = mrps
+                    .map(x => Number(x))
+                    .filter(x => !isNaN(x) && x > 0);
+
+                if (processedMrps.length === 0) {
                     return res.status(400).json({
                         success: false,
-                        message: "Barcode already exists"
+                        message: "At least one valid MRP is required"
                     });
                 }
 
-                await Barcode.findOneAndUpdate(
-                    { productId: product._id },
-                    { code }
-                );
+                product.mrps = processedMrps;
             }
 
-            
-            if (name) product.name = name.trim();
-            if (costPrice !== undefined)
-                product.costPrice = Number(costPrice);
-
-            if (sellingPrice !== undefined)
-                product.sellingPrice = Number(sellingPrice);
-
-            if (gst !== undefined)
-                product.gst = Number(gst);
-
-            if (stock !== undefined)
-                product.stock = Number(stock);
-
-            if (unitType) product.unitType = unitType;
-
-            if (unitValue !== undefined)
-                product.unitValue = Number(unitValue);
+            product.updatedBy = req.user.userId;
 
             await product.save();
 
@@ -319,6 +333,13 @@ router.put(
             });
 
         } catch (err) {
+            if (err.code === 11000) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Product already exists"
+                });
+            }
+
             res.status(500).json({
                 success: false,
                 message: "Server error",
@@ -329,32 +350,24 @@ router.put(
 );
 
 
-router.delete("/delete-all",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
+
+router.delete(
+    "/delete/all",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    async (req, res) => {
         try {
 
             const hierarchy = attachHierarchy(req.user);
 
-           
-            const products = await Product.find({
-                superAdminId: hierarchy.superAdminId
-            }).select("_id");
-
-            const productIds = products.map(p => p._id);
-
-            
-            await Barcode.deleteMany({
-                productId: { $in: productIds }
-            });
-
-           
-            const deletedProducts = await Product.deleteMany({
+            const result = await Product.deleteMany({
                 superAdminId: hierarchy.superAdminId
             });
 
             res.json({
                 success: true,
                 message: "All products deleted successfully",
-                deletedCount: deletedProducts.deletedCount
+                deletedCount: result.deletedCount
             });
 
         } catch (err) {
@@ -368,18 +381,25 @@ router.delete("/delete-all",verifyToken,authorize("super_admin", "admin", "cashi
 );
 
 
+
 router.delete(
     "/:id",
     verifyToken,
-    authorize("super_admin", "admin"),
+    authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
-
             const { id } = req.params;
+
+            if (!mongoose.Types.ObjectId.isValid(id)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid product id"
+                });
+            }
 
             const hierarchy = attachHierarchy(req.user);
 
-            const product = await Product.findOne({
+            const product = await Product.findOneAndDelete({
                 _id: id,
                 superAdminId: hierarchy.superAdminId
             });
@@ -390,14 +410,6 @@ router.delete(
                     message: "Product not found"
                 });
             }
-
-           
-            await Barcode.deleteMany({
-                productId: product._id
-            });
-
-           
-            await Product.findByIdAndDelete(product._id);
 
             res.json({
                 success: true,
@@ -413,7 +425,6 @@ router.delete(
         }
     }
 );
-
 
 
 

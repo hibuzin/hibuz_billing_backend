@@ -6,194 +6,221 @@ const mongoose = require("mongoose");
 const Product = require("../models/Product");
 const Purchase = require("../models/Purchase");
 const GRN = require("../models/GRN");
-const Barcode = require("../models/Barcode");
 
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 const { attachHierarchy } = require("../utils/hierarchy");
 
 
-router.post("/grn",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
-        try {
-            const { purchaseId, items } = req.body;
+router.post(
+  "/grn",
+  verifyToken,
+  authorize("super_admin", "admin", "cashier"),
+  async (req, res) => {
+    try {
+      const { purchaseId, items } = req.body;
 
-            if (!mongoose.Types.ObjectId.isValid(purchaseId)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid purchase id"
-                });
-            }
+      if (!mongoose.Types.ObjectId.isValid(purchaseId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid purchase id"
+        });
+      }
 
-            if (!Array.isArray(items) || items.length === 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Items required"
-                });
-            }
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Items required"
+        });
+      }
 
-            const hierarchy = attachHierarchy(req.user);
+      const hierarchy = attachHierarchy(req.user);
 
+      const purchase = await Purchase.findOne({
+        _id: purchaseId,
+        superAdminId: hierarchy.superAdminId
+      });
 
-            const purchase = await Purchase.findOne({
-                _id: purchaseId,
-                superAdminId: hierarchy.superAdminId
-            });
+      if (!purchase) {
+        return res.status(404).json({
+          success: false,
+          message: "Purchase not found"
+        });
+      }
 
-            if (!purchase) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Purchase not found"
-                });
-            }
+      let totalItems = 0;
+      const grnItems = [];
 
+      for (const item of items) {
+        const productId = item.productId;
+        const receivedQty = Number(item.receivedQty);
+        const costPrice = Number(item.costPrice || 0);
 
-            const existingGRN = await GRN.findOne({ purchaseId });
-
-            if (existingGRN) {
-                return res.status(400).json({
-                    success: false,
-                    message: "GRN already created for this purchase"
-                });
-            }
-
-            let totalItems = 0;
-
-
-            for (const item of items) {
-                const productId = item.productId;
-                const receivedQty = Number(item.receivedQty || item.qty);
-                const costPrice = Number(item.costPrice || 0);
-
-                if (!productId || isNaN(receivedQty) || receivedQty <= 0) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Valid productId and receivedQty required"
-                    });
-                }
-
-                await Product.updateOne(
-                    {
-                        _id: productId,
-                        superAdminId: hierarchy.superAdminId
-                    },
-                    {
-                        $inc: {
-                            stock: receivedQty
-                        },
-                        $set: {
-                            costPrice: costPrice
-                        }
-                    }
-                );
-
-                totalItems += receivedQty;
-            }
-
-            const grn = await GRN.create({
-                purchaseId,
-                items,
-                totalItems,
-                ...hierarchy,
-                createdBy: req.user.userId
-            });
-
-            res.status(201).json({
-                success: true,
-                message: "GRN created & stock updated",
-                data: grn
-            });
-
-        } catch (err) {
-            res.status(500).json({
-                success: false,
-                message: "Server error",
-                error: err.message
-            });
+        if (!productId || isNaN(receivedQty) || receivedQty <= 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Valid productId and receivedQty required"
+          });
         }
+
+        const purchaseItem = purchase.items.find(
+          p => p.productId.toString() === productId
+        );
+
+        if (!purchaseItem) {
+          return res.status(400).json({
+            success: false,
+            message: "Product not found in this purchase"
+          });
+        }
+
+        const pendingQty = Number(
+          purchaseItem.pendingQty ?? purchaseItem.qty
+        );
+
+        if (receivedQty > pendingQty) {
+          return res.status(400).json({
+            success: false,
+            message: `Received qty cannot exceed pending qty. Pending: ${pendingQty}`
+          });
+        }
+
+        const product = await Product.findOne({
+          _id: productId,
+          superAdminId: hierarchy.superAdminId
+        });
+
+        if (!product) {
+          return res.status(404).json({
+            success: false,
+            message: "Product not found"
+          });
+        }
+
+        await Product.updateOne(
+          {
+            _id: productId,
+            superAdminId: hierarchy.superAdminId
+          },
+          {
+            $inc: { stock: receivedQty },
+            $set: { costPrice }
+          }
+        );
+
+        purchaseItem.receivedQty =
+          Number(purchaseItem.receivedQty || 0) + receivedQty;
+
+        purchaseItem.pendingQty =
+          Number(purchaseItem.qty) - Number(purchaseItem.receivedQty);
+
+        grnItems.push({
+          productId,
+          receivedQty,
+          costPrice
+        });
+
+        totalItems += receivedQty;
+      }
+
+      purchase.grnDate = new Date();
+      await purchase.save();
+
+      const grn = await GRN.create({
+        purchaseId,
+        items: grnItems,
+        totalItems,
+        isPartial: purchase.items.some(item => Number(item.pendingQty) > 0),
+        ...hierarchy,
+        createdBy: req.user.userId
+      });
+
+      res.status(201).json({
+        success: true,
+        message: "GRN created and stock added successfully",
+        data: grn
+      });
+
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+        error: err.message
+      });
     }
+  }
 );
 
 
-router.get("/grn",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
-        try {
+router.get(
+  "/grn",
+  verifyToken,
+  authorize("super_admin", "admin", "cashier"),
+  async (req, res) => {
+    try {
+      const hierarchy = attachHierarchy(req.user);
 
+      const grns = await GRN.find({
+        superAdminId: hierarchy.superAdminId
+      })
+        .populate("purchaseId", "supplierId totalAmount createdAt")
+        .populate("items.productId", "name brand stock")
+        .sort({ createdAt: -1 });
 
-            const hierarchy = attachHierarchy(req.user);
+      res.json({
+        success: true,
+        count: grns.length,
+        data: grns
+      });
 
-            const grns = await GRN.find({
-                superAdminId: hierarchy.superAdminId
-            })
-                .populate("purchaseId", "purchaseId totalAmount")
-                .populate("items.productId", "name sellingPrice stock")
-                .sort({ createdAt: -1 });
-
-            res.json({
-                success: true,
-                count: grns.length,
-                data: grns
-            });
-
-        } catch (err) {
-
-            console.error("GRN LIST ERROR:", err);
-
-            res.status(500).json({
-                success: false,
-                message: "Server error",
-                error: err.message
-            });
-        }
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+        error: err.message
+      });
     }
+  }
 );
 
-router.get("/grn/:id",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
-        try {
 
-            const { id } = req.params;
+router.get(
+  "/grn/:id",
+  verifyToken,
+  authorize("super_admin", "admin", "cashier"),
+  async (req, res) => {
+    try {
+      const hierarchy = attachHierarchy(req.user);
 
-            const hierarchy = attachHierarchy(req.user);
+      const grn = await GRN.findOne({
+        _id: req.params.id,
+        superAdminId: hierarchy.superAdminId
+      })
+        .populate("purchaseId", "supplierId totalAmount createdAt")
+        .populate("items.productId", "name brand stock");
 
-            const grn = await GRN.findOne({
-                _id: id,
-                superAdminId: hierarchy.superAdminId
-            })
+      if (!grn) {
+        return res.status(404).json({
+          success: false,
+          message: "GRN not found"
+        });
+      }
 
-                
-                .populate(
-                    "purchaseId",
-                    "purchaseId supplierId totalAmount createdAt"
-                )
+      res.json({
+        success: true,
+        data: grn
+      });
 
-                
-                .populate(
-                    "items.productId",
-                    "name sellingPrice stock categoryId"
-                );
-
-            if (!grn) {
-                return res.status(404).json({
-                    success: false,
-                    message: "GRN not found"
-                });
-            }
-
-            res.json({
-                success: true,
-                data: grn
-            });
-
-        } catch (err) {
-
-            console.error("GRN DETAILS ERROR:", err);
-
-            res.status(500).json({
-                success: false,
-                message: "Server error",
-                error: err.message
-            });
-        }
+    } catch (err) {
+      res.status(500).json({
+        success: false,
+        message: "Server error",
+        error: err.message
+      });
     }
+  }
 );
+
 
 router.post("/grn/partial",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
 

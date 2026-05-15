@@ -1,43 +1,61 @@
 const mongoose = require("mongoose");
 
+
 const productSchema = new mongoose.Schema({
+
     name: { type: String, required: true },
-    costPrice: { type: String },
-    sellingPrice: { type: Number, required: true },
-    gst: { type: Number, default: 0 },
-    stock: { type: Number, default: 0 },
+
+    brand: {
+        type: String,
+        default: "",
+        trim: true
+    },
+
+    brand: {
+        type: String,
+        default: "",
+        trim: true
+    },
+
+    stock: {
+        type: Number,
+        default: 0
+    },
+
+    flavor: [{
+        type: String,
+        trim: true
+    }],
+
+    liters: [{
+        type: String,
+        trim: true
+    }],
+
+    mrps: [{
+        type: Number
+    }],
+
     categoryId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Category",
         required: true
     },
 
-
-    reorderLevel: {
-        type: Number,
-        default: 5
+    hsnId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Hsn",
+        default: null
     },
 
-    unitType: {
+    hsnCode: {
         type: String,
-        enum: ["kg", "liter", "piece", "box"],
+        default: ""
     },
 
-
-
-    weight: {
-        type: Number, 
-        default: null
-    },
-
-    volume: {
-        type: Number, 
-        default: null
-    },
-
-    unitValue: {
+    gstRate: {
         type: Number,
-        default: 1
+        default: 0
     },
 
     superAdminId: {
@@ -56,14 +74,7 @@ const productSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
         required: true
-    },
-
-
+    }
 }, { timestamps: true });
-
-productSchema.index(
-    { name: 1, superAdminId: 1 },
-    { unique: true }
-);
 
 module.exports = mongoose.model("Product", productSchema);

@@ -8,7 +8,7 @@ const grnItemSchema = new mongoose.Schema(
             required: true
         },
 
-        qty: {
+        receivedQty: {
             type: Number,
             required: true,
             default: 1

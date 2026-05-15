@@ -106,6 +106,7 @@ router.post(
 
 
 
+
 router.get(
     "/customers",
     verifyToken,
@@ -149,40 +150,77 @@ router.get(
     }
 );
 
+
+router.get(
+    "/customers/phone/:phone",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    async (req, res) => {
+        try {
+
+            const { phone } = req.params;
+
+            const hierarchy = attachHierarchy(req.user);
+
+
+            const customer = await Customer.findOne({
+                phone: phone.trim(),
+                superAdminId: hierarchy.superAdminId
+            });
+
+            if (!customer) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Customer not found"
+                });
+            }
+
+            res.json({
+                success: true,
+                data: customer
+            });
+
+        } catch (err) {
+            res.status(500).json({
+                success: false,
+                message: "Server error",
+                error: err.message
+            });
+        }
+    }
+);
+
+
+
+
 router.get(
     "/customers/:id",
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
+
             const { id } = req.params;
-            const { superAdminId } = req.user;
 
-            let filter = {};
+            const hierarchy = attachHierarchy(req.user);
 
-            
+            let filter = {
+                superAdminId: hierarchy.superAdminId
+            };
+
+           
             if (mongoose.Types.ObjectId.isValid(id)) {
                 filter._id = id;
             } else {
-                filter.customerId = id;
+                filter.customerId = Number(id);
             }
 
-           
-            if (role === "super_admin") {
-                filter.superAdminId = userId;
-            } else {
-                filter.superAdminId = superAdminId;
-            }
-
-            const customer = await Customer.findOne({
-                _id: id,
-                superAdminId: superAdminId
-            });
+            const customer = await Customer.findOne(filter);
 
             if (!customer) {
                 return res.status(404).json({
                     success: false,
-                    message: "Customer not found or not authorized"
+                    message: "Customer not found"
                 });
             }
 
@@ -208,37 +246,36 @@ router.put(
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
-            const { userId, superAdminId } = req.user;
             const { id } = req.params;
             const { name, phone, email, address } = req.body;
 
-            if (!mongoose.Types.ObjectId.isValid(id)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid customer ID"
-                });
+            const hierarchy = attachHierarchy(req.user);
+
+            let filter = {
+                superAdminId: hierarchy.superAdminId
+            };
+
+            if (mongoose.Types.ObjectId.isValid(id)) {
+                filter._id = id;
+            } else {
+                filter.id = Number(id);
             }
 
-          
-            const customer = await Customer.findOne({
-                _id: id,
-                superAdminId: superAdminId
-            });
+            const customer = await Customer.findOne(filter);
 
             if (!customer) {
                 return res.status(404).json({
                     success: false,
-                    message: "Customer not found or not authorized"
+                    message: "Customer not found"
                 });
             }
 
-            
             if (name) customer.name = name.trim();
             if (phone) customer.phone = phone.trim();
             if (email) customer.email = email.toLowerCase();
             if (address !== undefined) customer.address = address;
 
-            customer.lastUpdatedBy = userId;
+            customer.lastUpdatedBy = req.user.userId;
 
             await customer.save();
 
@@ -318,7 +355,7 @@ router.get(
                 superAdminId: finalSuperAdminId
             }).lean();
 
-           
+
             let csv = "Name,Phone,Email,Address,Points,TotalSpent\n";
 
 
@@ -382,7 +419,7 @@ router.post(
                         await Customer.bulkWrite(bulk);
                     }
 
-                    
+
                     fs.unlinkSync(req.file.path);
 
                     res.json({
@@ -399,8 +436,6 @@ router.post(
         }
     }
 );
-
-
 
 
 module.exports = router;

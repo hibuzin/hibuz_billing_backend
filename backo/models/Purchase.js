@@ -11,36 +11,132 @@ const purchaseSchema = new mongoose.Schema({
         type: Date
     },
 
+    invoiceNo: {
+        type: String,
+        required: true,
+        trim: true
+    },
+
+    invoiceDate: {
+        type: Date,
+        default: Date.now
+    },
 
     items: [
         {
             productId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Product",
+                required: true
+            },
+
+            hsnId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Hsn",
+                default: null
+            },
+
+            hsnCode: {
                 type: String,
-                required: true
+                default: ""
             },
-            qty: {
+
+            gstpercentage: {
                 type: Number,
-                required: true
+                default: 0
             },
+
+            categoryId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Category"
+            },
+
+            categoryName: {
+                type: String,
+                default: ""
+            },
+
+
+
+            brand: {
+                type: String,
+                default: ""
+            },
+
+            flavor: {
+                type: String,
+                default: ""
+            },
+
+            liters: {
+                type: String,
+                default: ""
+            },
+
+            qty: {
+                type: Number
+
+            },
+
             costPrice: {
                 type: Number,
                 required: true
+            },
+
+            mrp: {
+                type: Number,
+                default: 0
+            },
+
+            sellingPrice: {
+                type: Number,
+                default: 0
+            },
+
+            gst: {
+                type: Number,
+                default: 0
+            },
+
+
+
+            unitType: {
+                type: String,
+                enum: ["kg", "liter", "piece", "box"],
+                default: "piece"
+            },
+
+            unitValue: {
+                type: Number,
+                default: 1
+            },
+
+            barcode: {
+                type: String,
+                default: ""
+            },
+
+            receivedQty: {
+                type: Number,
+                default: 0
+            },
+
+            pendingQty: {
+                type: Number,
+                default: 0
             }
         }
     ],
-    totalAmount: {
-        type: Number,
-        required: true
-    },
 
-    receivedQty: {
+    stock: {
         type: Number,
         default: 0
     },
 
-    pendingQty: {
-        type: Number,
-        default: 0
+
+    updatedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
     },
 
     superAdminId: {
@@ -61,8 +157,12 @@ const purchaseSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
         required: true
-    }
+    },
 
+    totalAmount: {
+        type: Number,
+        required: true
+    }
 
 }, { timestamps: true });
 

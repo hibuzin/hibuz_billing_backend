@@ -6,6 +6,7 @@ const User = require("../models/user");
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 const bcrypt = require("bcryptjs");
+const { attachHierarchy } = require("../utils/hierarchy");
 
 
 

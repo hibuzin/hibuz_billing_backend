@@ -3,12 +3,11 @@ const router = express.Router();
 
 const Barcode = require("../models/Barcode");
 const Product = require("../models/Product");
+
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 const { attachHierarchy } = require("../utils/hierarchy");
 const { successResponse, errorResponse } = require("../utils/response");
-
-
 
 router.get(
     "/:code",
@@ -16,79 +15,72 @@ router.get(
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
+            const code = String(req.params.code || "").trim();
 
-            const code = String(req.params.code).trim();
+            if (!code) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Barcode is required"
+                });
+            }
 
-           
             const hierarchy = attachHierarchy(req.user);
 
-            
             const barcode = await Barcode.findOne({
                 code,
-                superAdminId: hierarchy.superAdminId
-            });
+                superAdminId: hierarchy.superAdminId,
+                isSold: false
+            }).populate("productId");
 
             if (!barcode) {
-                return errorResponse(
-                    res,
-                    "Invalid barcode",
-                    404
-                );
+                return res.status(404).json({
+                    success: false,
+                    message: "Product not found or already sold"
+                });
             }
 
-           
-            const product = await Product.findOne({
-                _id: barcode.productId,
-                superAdminId: hierarchy.superAdminId
-            });
+            const product = barcode.productId;
 
             if (!product) {
-                return errorResponse(
-                    res,
-                    "Product not found",
-                    404
-                );
+                return res.status(404).json({
+                    success: false,
+                    message: "Product not found"
+                });
             }
 
-            const price = Number(product.sellingPrice);
-            const gst = Number(product.gst || 0);
+            return res.json({
+                success: true,
+                message: "Product scanned successfully",
+                data: {
+                    barcode: barcode.code,
 
-            const gstAmount = (price * gst) / 100;
-            const finalPrice = price + gstAmount;
+                    productId: product._id,
+                    productName: product.name,
+                    brand: product.brand || "",
 
-            return successResponse(
-                res,
-                {
-                    product: {
-                        id: product._id,
-                        name: product.name,
-                        sellingPrice: price,
-                        gst,
-                        gstAmount,
-                        finalPrice,
-                        stock: product.stock
-                    },
+                    hsnCode: product.hsnCode || "",
+                    gstRate: product.gstRate || 0,
 
-                    barcode: {
-                        id: barcode._id,
-                        code: barcode.code,
-                        isSold: barcode.isSold
-                    }
-                },
-                "Scan successful"
-            );
+                    flavor: barcode.flavor || "",
+                    liters: barcode.liters || "",
 
-        } catch (err) {
+                    mrp: barcode.mrp || product.mrp || 0,
+                    sellingPrice: barcode.sellingPrice || product.sellingPrice || 0,
 
-            console.error("SCAN ERROR:", err);
+                    stock: product.stock || 0,
+                    isSold: barcode.isSold
+                }
+            });
 
+        } catch (error) {
             return res.status(500).json({
                 success: false,
                 message: "Server error",
-                error: err.message
+                error: error.message
             });
         }
     }
 );
+
 
 module.exports = router;

@@ -31,6 +31,22 @@ const returnRoutes = require("./routes/return");
 const reorderRoutes = require("./routes/reorder");
 const barcodePrintRoutes = require("./routes/barcodePrint");
 const StockRebillingRoutes = require("./routes/StockRebilling");
+const salesInvoiceRoutes = require("./routes/salesInvoice");
+const salesReturnRoutes = require("./routes/salesReturn");
+const salesReturnRequestRoutes = require("./routes/salesReturnRequest");
+const holdBillRoutes = require("./routes/holdBill");
+const auditLogRoutes = require("./routes/auditLogs");
+const stockLedgerRoutes = require("./routes/stockLedger");
+const gstReportsRoutes = require("./routes/gstReports");
+const gstReturnsRoutes = require("./routes/gstReturns");
+const annexureReportsRoutes = require("./routes/annexureReports");
+const stockRoutes = require("./routes/stock");
+const brandRoutes = require("./routes/brand");
+const attributeRoutes = require("./routes/attribute");
+const locationRoutes = require("./routes/location");
+const hsnRoutes = require("./routes/hsn");
+
+
 
 
 
@@ -46,12 +62,28 @@ app.use("/api/customer", customerRoutes);
 app.use("/api/purchase", purchaseRoutes);
 app.use("/api/category", categoryRoutes);
 app.use("/api/loyalty", loyaltyRoutes);
-app.use("/api/Damage", DamageRoutes);
-app.use("/api/GRN", GRNRoutes);
+app.use("/api/damage", DamageRoutes);
+app.use("/api/grn", GRNRoutes);
 app.use("/api/return", returnRoutes);
-app.use("/api", reorderRoutes);
-app.use("/api", barcodePrintRoutes);
-app.use("/api", StockRebillingRoutes);
+app.use("/api/reorder", reorderRoutes);
+app.use("/api/barcode-print", barcodePrintRoutes);
+app.use("/api/stock-rebilling", StockRebillingRoutes);
+app.use("/api/sales-invoice", salesInvoiceRoutes);
+app.use("/api/sales-return", salesReturnRoutes);
+app.use("/api/sales-return-request", salesReturnRequestRoutes);
+app.use("/api/hold-bill", holdBillRoutes);
+app.use("/api/audit-logs", auditLogRoutes);
+app.use("/api/stock-ledger", stockLedgerRoutes);
+app.use("/api/gst-reports", gstReportsRoutes);
+app.use("/api/gst-returns", gstReturnsRoutes);
+app.use("/api/annexure-reports", annexureReportsRoutes);
+app.use("/api/stock", stockRoutes);
+app.use("/api/brands", brandRoutes);
+app.use("/api/attributes", attributeRoutes);
+app.use("/api/locations", locationRoutes);
+app.use("/api/hsn", hsnRoutes);
+
+
 
 
 

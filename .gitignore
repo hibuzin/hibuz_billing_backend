@@ -96,3 +96,12 @@ Thumbs.db
 *.wmv
 
 >>>>>>> 83459871331a15e0105bbb51334af8f2540cbca7
+
+# Ignore platforms you don't use
+android/
+ios/
+linux/
+macos/
+windows/
+web/
+test/

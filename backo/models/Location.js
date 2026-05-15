@@ -1,67 +1,54 @@
 const mongoose = require("mongoose");
 
-const supplierSchema = new mongoose.Schema(
+const locationSchema = new mongoose.Schema(
     {
-
-        supplierId: {
-            type: String,
-            unique: true,
-            required: true
-        },
-        
-        supplierName: {
+        name: {
             type: String,
             required: true,
             trim: true
         },
 
-        
-        mobile: {
+        type: {
             type: String,
-            required: true,
-            trim: true,
-            match: [/^[0-9]{10}$/, "Invalid mobile number"]
+            enum: ["STORE", "WAREHOUSE", "COUNTER", "RACK", "DELIVERY_ZONE"],
+            required: true
         },
 
-      
-        gstNumber: {
+        code: {
             type: String,
             trim: true,
-            uppercase: true,
-            match: [
-                /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[A-Z0-9]{3}$/,
-                "Invalid GST number"
-            ]
-        },
-
-        email: {
-            type: String,
-            trim: true,
-            lowercase: true,
             default: ""
         },
 
         address: {
             type: String,
+            trim: true,
             default: ""
         },
 
         city: {
             type: String,
-            default: ""
-        },
-
-        state: {
-            type: String,
+            trim: true,
             default: ""
         },
 
         pincode: {
             type: String,
+            trim: true,
             default: ""
         },
 
-        
+        contactPerson: {
+            type: String,
+            trim: true,
+            default: ""
+        },
+
+        phone: {
+            type: String,
+            trim: true,
+            default: ""
+        },
 
         isActive: {
             type: Boolean,
@@ -82,13 +69,15 @@ const supplierSchema = new mongoose.Schema(
 
         createdBy: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "User",
-            required: true
-        },
+            ref: "User"
+        }
     },
-    {
-        timestamps: true
-    }
+    { timestamps: true }
 );
 
-module.exports = mongoose.model("Supplier", supplierSchema);
+locationSchema.index(
+    { name: 1, type: 1, superAdminId: 1 },
+    { unique: true }
+);
+
+module.exports = mongoose.model("Location", locationSchema);

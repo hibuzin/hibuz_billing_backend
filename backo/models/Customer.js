@@ -54,7 +54,8 @@ const customerSchema = new mongoose.Schema(
 
         adminId: {
             type: mongoose.Schema.Types.ObjectId,
-            ref: "User"
+            ref: "User",
+            default: null
         },
 
         createdBy: {
@@ -73,10 +74,15 @@ const customerSchema = new mongoose.Schema(
 
 customerSchema.set("toJSON", {
     transform: (doc, ret) => {
+
+
         ret.id = ret.customerId;
-        delete ret._id;
-        delete ret.__v;
+
+
         delete ret.customerId;
+
+        delete ret.__v;
+
         return ret;
     }
 });

@@ -1,18 +1,14 @@
 const express = require("express");
 const router = express.Router();
 
-const mongoose = require("mongoose");
-const Barcode = require("../models/Barcode");
+const Bill = require("../models/Bill");
 const Product = require("../models/Product");
-const Bill = require("../models/bill");
+const Barcode = require("../models/Barcode");
+const Customer = require("../models/Customer");
+
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
-const Customer = require("../models/Customer");
-const { successResponse, errorResponse } = require("../utils/response");
 const { attachHierarchy } = require("../utils/hierarchy");
-const PDFDocument = require("pdfkit");
-const fs = require("fs");
-
 
 router.post(
     "/",
@@ -20,67 +16,65 @@ router.post(
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
-            const {
-                codes,
-                customerId,
-                redeemPoints = 0
-            } = req.body;
+            const { codes, customerId, redeemPoints = 0 } = req.body;
 
             if (!Array.isArray(codes) || codes.length === 0) {
-                return errorResponse(res, "No barcodes provided", 400);
+                return res.status(400).json({
+                    success: false,
+                    message: "No barcodes provided"
+                });
             }
 
             const hierarchy = attachHierarchy(req.user);
 
             let subTotal = 0;
             let totalGST = 0;
-
             const items = [];
 
             for (const code of codes) {
-
-              
                 const barcode = await Barcode.findOne({
-                    code,
+                    code: String(code).trim(),
+                    isSold: false,
                     superAdminId: hierarchy.superAdminId
-                
                 });
 
                 if (!barcode) {
-                    return errorResponse(
-                        res,
-                        `Invalid or already sold barcode: ${code}`,
-                        400
-                    );
+                    return res.status(400).json({
+                        success: false,
+                        message: `Invalid or already sold barcode: ${code}`
+                    });
                 }
 
-              
                 const product = await Product.findOne({
                     _id: barcode.productId,
                     superAdminId: hierarchy.superAdminId
                 });
 
                 if (!product) {
-                    return errorResponse(
-                        res,
-                        "Product not found",
-                        404
-                    );
+                    return res.status(404).json({
+                        success: false,
+                        message: "Product not found"
+                    });
                 }
 
-              
                 if (product.stock <= 0) {
-                    return errorResponse(
-                        res,
-                        `${product.name} out of stock`,
-                        400
-                    );
+                    return res.status(400).json({
+                        success: false,
+                        message: `${product.name} out of stock`
+                    });
                 }
 
-                const price = Number(product.sellingPrice);
-                const gst = Number(product.gst || 0);
+                const price = Number(barcode.sellingPrice || 0);
+                const gstRate = Number(barcode.gstRate || product.gstRate || 0);
 
-                const gstAmount = (price * gst) / 100;
+                if (price <= 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Invalid selling price for barcode: ${code}`
+                    });
+                }
+
+                const gstAmount = (price * gstRate) / 100;
                 const finalPrice = price + gstAmount;
 
                 subTotal += price;
@@ -89,18 +83,23 @@ router.post(
                 items.push({
                     productId: product._id,
                     barcodeId: barcode._id,
+                    barcode: barcode.code,
+
                     name: product.name,
+                    brand: product.brand || "",
+                    flavor: barcode.flavor || "",
+                    liters: barcode.liters || "",
+
+                    mrp: barcode.mrp,
                     price,
-                    gst,
+                    gstRate,
                     gstAmount,
                     finalPrice
                 });
 
-                
                 barcode.isSold = true;
                 await barcode.save();
 
-                
                 await Product.updateOne(
                     {
                         _id: product._id,
@@ -117,54 +116,42 @@ router.post(
             let discount = 0;
             let customer = null;
 
-
             if (customerId) {
-
                 customer = await Customer.findOne({
                     customerId,
                     superAdminId: hierarchy.superAdminId
                 });
 
                 if (!customer) {
-                    return errorResponse(
-                        res,
-                        "Customer not found",
-                        404
-                    );
+                    return res.status(404).json({
+                        success: false,
+                        message: "Customer not found"
+                    });
                 }
 
-                if (redeemPoints > 0) {
-
-                    if (customer.loyaltyPoints < redeemPoints) {
-                        return errorResponse(
-                            res,
-                            "Not enough loyalty points",
-                            400
-                        );
+                if (Number(redeemPoints) > 0) {
+                    if (customer.loyaltyPoints < Number(redeemPoints)) {
+                        return res.status(400).json({
+                            success: false,
+                            message: "Not enough loyalty points"
+                        });
                     }
 
-                    discount = redeemPoints;
-                    customer.loyaltyPoints -= redeemPoints;
+                    discount = Number(redeemPoints);
+                    customer.loyaltyPoints -= discount;
                 }
             }
 
-            const grandTotal =
-                subTotal + totalGST - discount;
-
-            const earnedPoints =
-                Math.floor(grandTotal / 100);
+            const grandTotal = subTotal + totalGST - discount;
+            const earnedPoints = Math.floor(grandTotal / 100);
 
             if (customer) {
-
                 customer.loyaltyPoints += earnedPoints;
                 customer.totalSpent += grandTotal;
-
                 await customer.save();
             }
 
-           
             const bill = await Bill.create({
-
                 items,
 
                 summary: {
@@ -174,47 +161,44 @@ router.post(
                     grandTotal
                 },
 
-                customerId: customer
-                    ? customer._id
-                    : null,
+                customerId: customer ? customer._id : null,
+
+                paymentStatus: "paid",
 
                 createdBy: req.user.userId,
                 role: req.user.role,
 
-                
-                superAdminId: hierarchy.superAdminId
+                ...hierarchy
             });
 
-            return successResponse(
-                res,
-                {
+            return res.status(201).json({
+                success: true,
+                message: "Bill generated successfully",
+                data: {
                     billId: bill._id,
                     items,
                     summary: bill.summary,
-
                     loyalty: {
-                        used: redeemPoints,
+                        used: discount,
                         earned: earnedPoints,
-                        remaining: customer
-                            ? customer.loyaltyPoints
-                            : 0
+                        remaining: customer ? customer.loyaltyPoints : 0
                     }
-                },
-                "Bill generated successfully"
-            );
+                }
+            });
 
-        } catch (err) {
-
-            console.error("BILL ERROR:", err);
+        } catch (error) {
+            console.error("BILL ERROR:", error);
 
             return res.status(500).json({
                 success: false,
                 message: "Server error",
-                error: err.message
+                error: error.message
             });
         }
     }
 );
+
+
 
 router.get("/sales", verifyToken, authorize("super_admin"), async (req, res) => {
     try {
