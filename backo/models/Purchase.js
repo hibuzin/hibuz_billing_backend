@@ -1,11 +1,13 @@
 const mongoose = require("mongoose");
 
 const purchaseSchema = new mongoose.Schema({
+
     supplierId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Supplier",
         required: true
     },
+
 
     grnDate: {
         type: Date
@@ -68,13 +70,14 @@ const purchaseSchema = new mongoose.Schema({
                 default: ""
             },
 
-            liters: {
+            litters: {
                 type: String,
                 default: ""
             },
 
             qty: {
-                type: Number
+                type: Number,
+                required: true
 
             },
 
@@ -100,17 +103,6 @@ const purchaseSchema = new mongoose.Schema({
 
 
 
-            unitType: {
-                type: String,
-                enum: ["kg", "liter", "piece", "box"],
-                default: "piece"
-            },
-
-            unitValue: {
-                type: Number,
-                default: 1
-            },
-
             barcode: {
                 type: String,
                 default: ""
@@ -128,16 +120,13 @@ const purchaseSchema = new mongoose.Schema({
         }
     ],
 
-    stock: {
-        type: Number,
-        default: 0
-    },
 
 
     updatedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User"
     },
+
 
     superAdminId: {
         type: mongoose.Schema.Types.ObjectId,

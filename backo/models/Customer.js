@@ -4,46 +4,46 @@ const customerSchema = new mongoose.Schema(
     {
         customerId: {
             type: Number,
-            required: true,
-            unique: true,
-            index: true
+            required: true
         },
 
         name: {
             type: String,
             required: true,
-            trim: true,
+            trim: true
         },
 
         phone: {
             type: String,
-            required: true
-
+            required: true,
+            trim: true
         },
 
         email: {
             type: String,
             default: "",
+            trim: true
         },
 
         address: {
             type: String,
             default: "",
+            trim: true
         },
 
         totalPurchases: {
             type: Number,
-            default: 0,
+            default: 0
         },
 
         loyaltyPoints: {
             type: Number,
-            default: 0,
+            default: 0
         },
 
         totalSpent: {
             type: Number,
-            default: 0,
+            default: 0
         },
 
         superAdminId: {
@@ -64,27 +64,51 @@ const customerSchema = new mongoose.Schema(
         },
 
         roleCreatedBy: {
-            type: String
-        },
+            type: String,
+            enum: ["super_admin", "admin", "cashier"]
+        }
     },
-
-
-    { timestamps: true }
+    {
+        timestamps: true
+    }
 );
+
+
+
+
+customerSchema.index(
+    { superAdminId: 1, customerId: 1 },
+    { unique: true }
+);
+
+
+customerSchema.index(
+    { superAdminId: 1, phone: 1 },
+    { unique: true }
+);
+
+
+customerSchema.index({
+    superAdminId: 1,
+    name: 1
+});
+
+
+
 
 customerSchema.set("toJSON", {
     transform: (doc, ret) => {
 
-
+       
         ret.id = ret.customerId;
 
-
         delete ret.customerId;
-
         delete ret.__v;
 
         return ret;
     }
 });
+
+
 
 module.exports = mongoose.model("Customer", customerSchema);

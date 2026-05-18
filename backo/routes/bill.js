@@ -32,6 +32,8 @@ router.post(
             const items = [];
 
             for (const code of codes) {
+                const qty = 1;
+
                 const barcode = await Barcode.findOne({
                     code: String(code).trim(),
                     isSold: false,
@@ -57,7 +59,7 @@ router.post(
                     });
                 }
 
-                if (product.stock <= 0) {
+                if (Number(barcode.availableQty || 0) < qty) {
                     return res.status(400).json({
                         success: false,
                         message: `${product.name} out of stock`
@@ -74,10 +76,11 @@ router.post(
                     });
                 }
 
-                const gstAmount = (price * gstRate) / 100;
-                const finalPrice = price + gstAmount;
+                const taxableAmount = price * qty;
+                const gstAmount = (taxableAmount * gstRate) / 100;
+                const finalPrice = taxableAmount + gstAmount;
 
-                subTotal += price;
+                subTotal += taxableAmount;
                 totalGST += gstAmount;
 
                 items.push({
@@ -88,29 +91,54 @@ router.post(
                     name: product.name,
                     brand: product.brand || "",
                     flavor: barcode.flavor || "",
-                    liters: barcode.liters || "",
+                    litters: barcode.litters || "",
 
-                    mrp: barcode.mrp,
+                    qty,
+                    mrp: barcode.mrp || 0,
                     price,
                     gstRate,
                     gstAmount,
                     finalPrice
                 });
 
-                barcode.isSold = true;
+                barcode.availableQty = Math.max(Number(barcode.availableQty || 0) - qty, 0);
+
+                if (barcode.availableQty <= 0) {
+                    barcode.isSold = true;
+                }
+
                 await barcode.save();
 
-                await Product.updateOne(
+                const availableStock =
+                    Number(product.stock || 0) -
+                    Number(product.reservedStock || 0);
+
+                if (availableStock < qty) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `${product.name} stock not available`
+                    });
+                }
+
+                const stockUpdate = await Product.updateOne(
                     {
                         _id: product._id,
-                        superAdminId: hierarchy.superAdminId
+                        superAdminId: hierarchy.superAdminId,
+                        stock: { $gte: qty }
                     },
                     {
                         $inc: {
-                            stock: -1
+                            stock: -qty
                         }
                     }
                 );
+
+                if (stockUpdate.modifiedCount === 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `${product.name} stock update failed`
+                    });
+                }
             }
 
             let discount = 0;
@@ -153,21 +181,17 @@ router.post(
 
             const bill = await Bill.create({
                 items,
-
                 summary: {
                     subTotal,
                     totalGST,
                     discount,
                     grandTotal
                 },
-
                 customerId: customer ? customer._id : null,
-
+                paymentMethod: "cash",
                 paymentStatus: "paid",
-
                 createdBy: req.user.userId,
                 role: req.user.role,
-
                 ...hierarchy
             });
 
@@ -200,151 +224,190 @@ router.post(
 
 
 
-router.get("/sales", verifyToken, authorize("super_admin"), async (req, res) => {
-    try {
 
-        const type = req.query.type || "today";
-        const now = new Date();
-        let startDate = new Date();
-        const endDate = now;
+// SALES CHECK - today / week / month / year
+router.get(
+    "/sales-check",
+    verifyToken,
+    authorize("super_admin", "admin"),
+    async (req, res) => {
+        try {
+            const { type = "today" } = req.query;
+            const hierarchy = attachHierarchy(req.user);
 
-        switch (type) {
-            case "today":
-                startDate.setHours(0, 0, 0, 0);
-                break;
-            case "week":
+            const now = new Date();
+            let startDate;
+
+            if (type === "today") {
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            } else if (type === "week") {
+                startDate = new Date(now);
                 startDate.setDate(now.getDate() - 7);
-                break;
-            case "month":
-                startDate.setMonth(now.getMonth() - 1);
-                break;
-            case "year":
-                startDate.setFullYear(now.getFullYear() - 1);
-                break;
-            default:
-                startDate.setHours(0, 0, 0, 0);
-        }
-
-        const bills = await Bill.find({
-            createdAt: { $gte: startDate, $lte: endDate }
-        }).lean();
-
-
-        const totalSales = bills.reduce((sum, bill) => {
-            const billTotal = bill.items.reduce((itemSum, item) => {
-                const gstAmount = (item.price * item.gst) / 100;
-                return itemSum + item.price + gstAmount;
-            }, 0);
-
-            return sum + billTotal;
-        }, 0);
-
-        return successResponse(res, {
-            type,
-            totalBills: bills.length,
-            totalSalesAmount: parseFloat(totalSales.toFixed(2)),
-
-
-            bills: bills.map(bill => {
-                const billTotal = bill.items.reduce((itemSum, item) => {
-                    const gstAmount = (item.price * item.gst) / 100;
-                    return itemSum + item.price + gstAmount;
-                }, 0);
-
-                return {
-                    billId: bill._id,
-                    totalAmount: bill.totalAmount,
-                    grandTotal: parseFloat(billTotal.toFixed(2)),
-                    itemCount: bill.items.length,
-                    createdAt: bill.createdAt
-                };
-            })
-        }, "Sales fetched successfully");
-
-    } catch (err) {
-
-
-        return errorResponse(res, err.message, 500);
-    }
-});
-
-router.get("/sales/cashier", verifyToken, authorize("super_admin", "admin"), async (req, res) => {
-    try {
-        const { cashierId, type = "today" } = req.query;
-
-        const now = new Date();
-        let startDate = new Date();
-
-        if (type === "today") {
-            startDate.setHours(0, 0, 0, 0);
-        } else if (type === "week") {
-            startDate.setDate(now.getDate() - 7);
-        } else if (type === "month") {
-            startDate.setMonth(now.getMonth() - 1);
-        } else if (type === "year") {
-            startDate.setFullYear(now.getFullYear() - 1);
-        }
-
-        const matchStage = {};
-
-        if (cashierId) {
-            matchStage.createdBy = new mongoose.Types.ObjectId(cashierId);
-        }
-
-        const sales = await Bill.aggregate([
-            { $match: matchStage },
-
-            {
-                $lookup: {
-                    from: "users",
-                    localField: "createdBy",
-                    foreignField: "_id",
-                    as: "cashier"
-                }
-            },
-            { $unwind: "$cashier" },
-
-            {
-                $match: {
-                    "cashier.role": "cashier"
-                }
-            },
-
-            {
-                $group: {
-                    _id: "$createdBy",
-                    cashierName: { $first: "$cashier.name" },
-                    totalBills: { $sum: 1 },
-                    totalAmount: { $sum: "$summary.grandTotal" },
-
-                }
-            },
-
-            {
-                $project: {
-                    _id: 0,
-                    cashierId: "$_id",
-                    cashierName: 1,
-                    totalBills: 1,
-                    totalAmount: 1
-                }
+            } else if (type === "month") {
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            } else if (type === "year") {
+                startDate = new Date(now.getFullYear(), 0, 1);
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid type. Use today, week, month, or year"
+                });
             }
-        ]);
 
-        res.json({
-            success: true,
-            data: sales
-        });
+            const sales = await Bill.aggregate([
+                {
+                    $match: {
+                        superAdminId: hierarchy.superAdminId,
+                        createdAt: { $gte: startDate, $lte: now },
+                        paymentStatus: "paid"
+                    }
+                },
+                {
+                    $group: {
+                        _id: null,
+                        totalBills: { $sum: 1 },
+                        totalSales: { $sum: "$summary.grandTotal" },
+                        totalGST: { $sum: "$summary.totalGST" },
+                        totalDiscount: { $sum: "$summary.discount" },
+                        subTotal: { $sum: "$summary.subTotal" }
+                    }
+                }
+            ]);
 
-    } catch (err) {
-        res.status(500).json({
-            success: false,
-            message: "Server error",
-            error: err.message
-        });
+            const result = sales[0] || {
+                totalBills: 0,
+                totalSales: 0,
+                totalGST: 0,
+                totalDiscount: 0,
+                subTotal: 0
+            };
+
+            return res.status(200).json({
+                success: true,
+                message: `${type} sales fetched successfully`,
+                filter: {
+                    type,
+                    from: startDate,
+                    to: now
+                },
+                data: result
+            });
+
+        } catch (error) {
+            console.error("SALES CHECK ERROR:", error);
+            return res.status(500).json({
+                success: false,
+                message: "Server error",
+                error: error.message
+            });
+        }
     }
-}
 );
+
+
+
+// CASHIER WISE SALES CHECK
+router.get(
+    "/cashier-wise-sales",
+    verifyToken,
+    authorize("super_admin", "admin"),
+    async (req, res) => {
+        try {
+            const { type = "today" } = req.query;
+            const hierarchy = attachHierarchy(req.user);
+
+            const now = new Date();
+            let startDate;
+
+            if (type === "today") {
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            } else if (type === "week") {
+                startDate = new Date(now);
+                startDate.setDate(now.getDate() - 7);
+            } else if (type === "month") {
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            } else if (type === "year") {
+                startDate = new Date(now.getFullYear(), 0, 1);
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid type. Use today, week, month, or year"
+                });
+            }
+
+            const sales = await Bill.aggregate([
+                {
+                    $match: {
+                        superAdminId: hierarchy.superAdminId,
+                        createdAt: { $gte: startDate, $lte: now },
+                        paymentStatus: "paid"
+                    }
+                },
+                {
+                    $group: {
+                        _id: "$createdBy",
+                        totalBills: { $sum: 1 },
+                        subTotal: { $sum: "$summary.subTotal" },
+                        totalGST: { $sum: "$summary.totalGST" },
+                        totalDiscount: { $sum: "$summary.discount" },
+                        totalSales: { $sum: "$summary.grandTotal" }
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "users",
+                        localField: "_id",
+                        foreignField: "_id",
+                        as: "cashier"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$cashier",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        cashierId: "$_id",
+                        cashierName: { $ifNull: ["$cashier.name", "Unknown"] },
+                        cashierEmail: { $ifNull: ["$cashier.email", ""] },
+                        totalBills: 1,
+                        subTotal: 1,
+                        totalGST: 1,
+                        totalDiscount: 1,
+                        totalSales: 1
+                    }
+                },
+                {
+                    $sort: { totalSales: -1 }
+                }
+            ]);
+
+            return res.status(200).json({
+                success: true,
+                message: "Cashier wise sales fetched successfully",
+                filter: {
+                    type,
+                    from: startDate,
+                    to: now
+                },
+                data: sales
+            });
+
+        } catch (error) {
+            console.error("CASHIER SALES ERROR:", error);
+            return res.status(500).json({
+                success: false,
+                message: "Server error",
+                error: error.message
+            });
+        }
+    }
+);
+
+
 
 router.get("/print/:id", async (req, res) => {
     try {

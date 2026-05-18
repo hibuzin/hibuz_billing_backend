@@ -13,7 +13,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 
+
 const authRoutes = require("./routes/auth");
+const superAdminUserRoutes = require("./routes/superAdminUser");
+const superAdminRoutes = require("./routes/superAdmin");
 const cashierRoutes = require("./routes/cashier");
 const adminsRoutes = require("./routes/admins");
 const productsRoutes = require("./routes/products");
@@ -49,8 +52,9 @@ const hsnRoutes = require("./routes/hsn");
 
 
 
-
 app.use("/api/auth", authRoutes);
+app.use("/api/super-admin", superAdminUserRoutes);
+app.use("/api/super-admin", superAdminRoutes);
 app.use("/api/cashier", cashierRoutes);
 app.use("/api/admins", adminsRoutes);
 app.use("/api/products", productsRoutes);
@@ -101,5 +105,5 @@ mongoose.connect(MONGO_URI)
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on http://192.168.31.181:${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });

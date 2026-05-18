@@ -151,33 +151,65 @@ router.get(
 );
 
 
+
+
 router.get(
-    "/customers/phone/:phone",
+    "/customers/search",
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
+            const { q } = req.query;
+            const { userId, role, superAdminId } = req.user;
 
-            const { phone } = req.params;
-
-            const hierarchy = attachHierarchy(req.user);
-
-
-            const customer = await Customer.findOne({
-                phone: phone.trim(),
-                superAdminId: hierarchy.superAdminId
-            });
-
-            if (!customer) {
-                return res.status(404).json({
+            if (!q || q.trim() === "") {
+                return res.status(400).json({
                     success: false,
-                    message: "Customer not found"
+                    message: "Search value is required"
                 });
             }
 
-            res.json({
+            const search = q.trim();
+
+            let finalSuperAdminId;
+
+            if (role === "super_admin") {
+                finalSuperAdminId = userId;
+            } else {
+                finalSuperAdminId = superAdminId;
+            }
+
+            if (!finalSuperAdminId) {
+                return res.status(403).json({
+                    success: false,
+                    message: "Invalid hierarchy"
+                });
+            }
+
+            const filter = {
+                superAdminId: finalSuperAdminId,
+                $or: [
+                    { phone: { $regex: search, $options: "i" } },
+                    { name: { $regex: search, $options: "i" } }
+                ]
+            };
+
+           
+            if (!isNaN(search)) {
+                filter.$or.push({
+                    customerId: Number(search)
+                });
+            }
+
+            const customers = await Customer.find(filter)
+                .select("customerId name phone email address")
+                .limit(10)
+                .sort({ createdAt: -1 });
+
+            res.status(200).json({
                 success: true,
-                data: customer
+                message: "Customers fetched successfully",
+                data: customers
             });
 
         } catch (err) {
@@ -189,8 +221,6 @@ router.get(
         }
     }
 );
-
-
 
 
 router.get(
@@ -208,7 +238,7 @@ router.get(
                 superAdminId: hierarchy.superAdminId
             };
 
-           
+
             if (mongoose.Types.ObjectId.isValid(id)) {
                 filter._id = id;
             } else {

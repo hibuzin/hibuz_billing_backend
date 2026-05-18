@@ -52,6 +52,8 @@ router.post(
                 superAdminId: hierarchy.superAdminId
             });
 
+            
+
             if (!supplier) {
                 return res.status(404).json({
                     success: false,
@@ -66,14 +68,12 @@ router.post(
                 const productId = item.productId;
 
                 const flavor = item.flavor ? String(item.flavor).trim() : "";
-                const liters = item.liters ? String(item.liters).trim() : "";
+                const litters = item.litters ? String(item.litters).trim() : "";
                 const mrp = Number(item.mrp);
                 const qty = Number(item.qty);
                 const costPrice = Number(item.costPrice);
                 const sellingPrice = Number(item.sellingPrice || mrp);
 
-                const unitType = item.unitType || "piece";
-                const unitValue = Number(item.unitValue || 1);
                 const barcode = String(item.barcode || item.code || "").trim();
 
                 if (!productId) {
@@ -122,7 +122,7 @@ router.post(
 
                 const productMrps = Array.isArray(product.mrps) ? product.mrps : [];
                 const productFlavors = Array.isArray(product.flavor) ? product.flavor : [];
-                const productLiters = Array.isArray(product.liters) ? product.liters : [];
+                const productLitters = Array.isArray(product.litters) ? product.litters : [];
 
                 if (!productMrps.includes(mrp)) {
                     return res.status(400).json({
@@ -138,10 +138,10 @@ router.post(
                     });
                 }
 
-                if (liters && !productLiters.includes(liters)) {
+                if (litters && !productLitters.includes(litters)) {
                     return res.status(400).json({
                         success: false,
-                        message: "Selected liters not found in product"
+                        message: "Selected litters not found in product"
                     });
                 }
 
@@ -160,8 +160,11 @@ router.post(
                             costPrice,
                             gstRate: gstpercentage,
 
+                            qty: qty,
+                            availableQty: qty,
+
                             flavor,
-                            liters,
+                            litters,
 
                             isSold: false,
 
@@ -170,62 +173,150 @@ router.post(
                         },
                         {
                             upsert: true,
-                            new: true
+                            returnDocument: "after"
                         }
                     );
-                
+                }
+
+                await Product.updateOne(
+                    {
+                        _id: product._id,
+                        superAdminId: hierarchy.superAdminId
+                    },
+                    {
+                        $inc: {
+                            stock: qty
+                        }
+                    }
+                );
+
+
+                totalAmount += (qty * costPrice) + gst;
+
+                processedItems.push({
+                    productId: product._id,
+
+                    hsnId: product.hsnId || null,
+                    hsnCode: product.hsnCode || "",
+                    gstpercentage,
+                    gst,
+
+                    categoryId: product.categoryId?._id,
+                    categoryName: product.categoryId?.name || "",
+                    brand: product.brand || "",
+
+                    flavor,
+                    litters,
+                    qty,
+                    costPrice,
+                    mrp,
+                    sellingPrice,
+                    barcode,
+
+                    receivedQty: 0,
+                    pendingQty: qty
+                });
             }
 
-            totalAmount += (qty * costPrice) + gst;
+            const purchase = await Purchase.create({
+                supplierId,
+                supplierName: supplier.supplierName || "",
+                supplierEmail: supplier.email || "",
+                invoiceNo,
+                invoiceDate,
+                items: processedItems,
+                totalAmount,
+                ...hierarchy,
+                createdBy: req.user.userId
+            });
 
-            processedItems.push({
-                productId: product._id,
+            const responsePurchase = await Purchase.findById(purchase._id)
+                .populate("items.productId", "name brand");
 
-                hsnId: product.hsnId || null,
-                hsnCode: product.hsnCode || "",
-                gstpercentage: gstpercentage,
-                gst,
+            return res.status(201).json({
+                success: true,
+                message: "Purchase created successfully",
 
-                categoryId: product.categoryId?._id,
-                categoryName: product.categoryId?.name || "",
-                brand: product.brand || "",
-                flavor,
-                liters,
-                qty,
-                costPrice,
-                mrp,
-                sellingPrice,
-                unitType,
-                unitValue,
-                barcode,
-                receivedQty: 0,
-                pendingQty: qty
+                data: {
+                    _id: responsePurchase._id,
+
+                    supplier: {
+                        id: String(supplier._id),
+
+                        name: String(supplier.supplierName || ""),
+
+                        mobile: String(supplier.mobile || ""),
+
+                        email: String(supplier.email || "")
+                    },
+
+                    invoiceNo: responsePurchase.invoiceNo,
+
+                    invoiceDate: responsePurchase.invoiceDate,
+
+                    totalAmount: responsePurchase.totalAmount,
+
+                    items: responsePurchase.items.map((item) => ({
+                        _id: item._id,
+
+                        productId: item.productId?._id,
+
+                        productName: item.productId?.name || "",
+
+                        brand:
+                            item.productId?.brand ||
+                            item.brand ||
+                            "",
+
+                        hsnCode: item.hsnCode || "",
+
+                        gstpercentage:
+                            item.gstpercentage || 0,
+
+                        categoryName:
+                            item.categoryName || "",
+
+                        flavor:
+                            item.flavor || "",
+
+                        litters:
+                            item.litters || "",
+
+                        qty:
+                            item.qty || 0,
+
+                        costPrice:
+                            item.costPrice || 0,
+
+                        mrp:
+                            item.mrp || 0,
+
+                        sellingPrice:
+                            item.sellingPrice || 0,
+
+                        gst:
+                            item.gst || 0,
+
+                        barcode:
+                            item.barcode || "",
+
+                        receivedQty:
+                            item.receivedQty || 0,
+
+                        pendingQty:
+                            item.pendingQty || 0
+                    }))
+                }
+            });
+
+
+        } catch (err) {
+            res.status(500).json({
+                success: false,
+                message: "Server error",
+                error: err.message
             });
         }
-
-            const purchase = await Purchase.create({
-            supplierId,
-            invoiceNo,
-            invoiceDate,
-            items: processedItems,
-            totalAmount,
-            ...hierarchy,
-            createdBy: req.user.userId
-        });
-
-        res.status(201).json({
-            success: true,
-            message: "Purchase created successfully",
-            data: purchase
-        });
-
-    } catch (err) {
-        res.status(500).json({
-            success: false,
-            message: "Server error",
-            error: err.message
-        });
-    }
     }
 );
 
@@ -236,23 +327,83 @@ router.get(
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
+
             const hierarchy = attachHierarchy(req.user);
 
             const purchases = await Purchase.find({
                 superAdminId: hierarchy.superAdminId
             })
-                .populate("supplierId", "name phone email")
+                .populate("supplierId", "supplierName mobile email")
                 .populate("items.productId", "name brand")
                 .sort({ createdAt: -1 });
 
-            res.json({
+            const formatted = purchases.map((purchase) => ({
+                _id: purchase._id,
+
+                supplier: {
+                    id: purchase.supplierId?._id || "",
+                    name: purchase.supplierId?.supplierName || "",
+                    mobile: purchase.supplierId?.mobile || "",
+                    email: purchase.supplierId?.email || ""
+                },
+
+                invoiceNo: purchase.invoiceNo,
+                invoiceDate: purchase.invoiceDate,
+                totalAmount: purchase.totalAmount,
+
+                items: purchase.items.map((item) => ({
+                    _id: item._id,
+
+                    productId: item.productId?._id || "",
+                    productName: item.productId?.name || "",
+
+                    brand:
+                        item.productId?.brand ||
+                        item.brand ||
+                        "",
+
+                    hsnCode: item.hsnCode || "",
+
+                    gstpercentage:
+                        item.gstpercentage || 0,
+
+                    categoryName:
+                        item.categoryName || "",
+
+                    flavor: item.flavor || "",
+                    litters: item.litters || "",
+
+                    qty: item.qty || 0,
+
+                    costPrice:
+                        item.costPrice || 0,
+
+                    mrp: item.mrp || 0,
+
+                    sellingPrice:
+                        item.sellingPrice || 0,
+
+                    gst: item.gst || 0,
+
+                    barcode:
+                        item.barcode || "",
+
+                    receivedQty:
+                        item.receivedQty || 0,
+
+                    pendingQty:
+                        item.pendingQty || 0
+                }))
+            }));
+
+            return res.status(200).json({
                 success: true,
-                count: purchases.length,
-                data: purchases
+                count: formatted.length,
+                data: formatted
             });
 
         } catch (err) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: "Server error",
                 error: err.message
@@ -269,6 +420,9 @@ router.get(
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
+
+            const hierarchy = attachHierarchy(req.user);
+
             const { id } = req.params;
 
             if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -278,13 +432,11 @@ router.get(
                 });
             }
 
-            const hierarchy = attachHierarchy(req.user);
-
             const purchase = await Purchase.findOne({
                 _id: id,
                 superAdminId: hierarchy.superAdminId
             })
-                .populate("supplierId", "name phone email")
+                .populate("supplierId", "supplierName mobile email")
                 .populate("items.productId", "name brand");
 
             if (!purchase) {
@@ -294,13 +446,79 @@ router.get(
                 });
             }
 
-            res.json({
+            return res.status(200).json({
                 success: true,
-                data: purchase
+                data: {
+                    _id: purchase._id,
+
+                    supplier: {
+                        id: purchase.supplierId?._id || "",
+                        name: purchase.supplierId?.supplierName || "",
+                        mobile: purchase.supplierId?.mobile || "",
+                        email: purchase.supplierId?.email || ""
+                    },
+
+                    invoiceNo: purchase.invoiceNo,
+                    invoiceDate: purchase.invoiceDate,
+                    totalAmount: purchase.totalAmount,
+
+                    items: purchase.items.map((item) => ({
+                        _id: item._id,
+
+                        productId: item.productId?._id || "",
+
+                        productName:
+                            item.productId?.name || "",
+
+                        brand:
+                            item.productId?.brand ||
+                            item.brand ||
+                            "",
+
+                        hsnCode:
+                            item.hsnCode || "",
+
+                        gstpercentage:
+                            item.gstpercentage || 0,
+
+                        categoryName:
+                            item.categoryName || "",
+
+                        flavor:
+                            item.flavor || "",
+
+                        litters:
+                            item.litters || "",
+
+                        qty:
+                            item.qty || 0,
+
+                        costPrice:
+                            item.costPrice || 0,
+
+                        mrp:
+                            item.mrp || 0,
+
+                        sellingPrice:
+                            item.sellingPrice || 0,
+
+                        gst:
+                            item.gst || 0,
+
+                        barcode:
+                            item.barcode || "",
+
+                        receivedQty:
+                            item.receivedQty || 0,
+
+                        pendingQty:
+                            item.pendingQty || 0
+                    }))
+                }
             });
 
         } catch (err) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: "Server error",
                 error: err.message
@@ -314,11 +532,20 @@ router.get(
 router.put(
     "/:id",
     verifyToken,
-    authorize("super_admin", "admin", "cashier"),
+    authorize("super_admin", "admin"),
     async (req, res) => {
         try {
+
+            const hierarchy = attachHierarchy(req.user);
+
             const { id } = req.params;
-            const { supplierId, items } = req.body;
+
+            const {
+                supplierId,
+                invoiceNo,
+                invoiceDate,
+                items
+            } = req.body;
 
             if (!mongoose.Types.ObjectId.isValid(id)) {
                 return res.status(400).json({
@@ -326,15 +553,6 @@ router.put(
                     message: "Invalid purchase id"
                 });
             }
-
-            if (!supplierId || !Array.isArray(items) || items.length === 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Supplier and items are required"
-                });
-            }
-
-            const hierarchy = attachHierarchy(req.user);
 
             const purchase = await Purchase.findOne({
                 _id: id,
@@ -348,69 +566,32 @@ router.put(
                 });
             }
 
-            const supplier = await Supplier.findOne({
-                _id: supplierId,
-                superAdminId: hierarchy.superAdminId
-            });
+           
+            for (const oldItem of purchase.items) {
 
-            if (!supplier) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Supplier not found"
-                });
+                await Product.updateOne(
+                    {
+                        _id: oldItem.productId,
+                        superAdminId: hierarchy.superAdminId
+                    },
+                    {
+                        $inc: {
+                            stock: -oldItem.qty
+                        }
+                    }
+                );
             }
 
+            let processedItems = [];
             let totalAmount = 0;
-            const processedItems = [];
 
+           
             for (const item of items) {
-                const productId = item.productId;
-
-                const flavor = item.flavor ? String(item.flavor).trim() : "";
-                const liters = item.liters ? String(item.liters).trim() : "";
-                const mrp = Number(item.mrp);
-
-                const qty = Number(item.qty);
-                const costPrice = Number(item.costPrice);
-                const sellingPrice = Number(item.sellingPrice || mrp);
-                const gst = Number(item.gst || 0);
-
-                const unitType = item.unitType || "piece";
-                const unitValue = Number(item.unitValue || 1);
-                const barcode = String(item.barcode || item.code || "").trim();
-
-                if (!productId) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Product id is required"
-                    });
-                }
-
-                if (isNaN(qty) || qty <= 0) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Invalid quantity"
-                    });
-                }
-
-                if (isNaN(costPrice) || costPrice < 0) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Invalid cost price"
-                    });
-                }
-
-                if (isNaN(mrp) || mrp <= 0) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Invalid MRP"
-                    });
-                }
 
                 const product = await Product.findOne({
-                    _id: productId,
+                    _id: item.productId,
                     superAdminId: hierarchy.superAdminId
-                });
+                }).populate("categoryId", "name");
 
                 if (!product) {
                     return res.status(404).json({
@@ -419,83 +600,135 @@ router.put(
                     });
                 }
 
-                const productMrps = Array.isArray(product.mrps) ? product.mrps : [];
-                const productFlavors = Array.isArray(product.flavor) ? product.flavor : [];
-                const productLiters = Array.isArray(product.liters) ? product.liters : [];
+                const qty = Number(item.qty);
+                const costPrice = Number(item.costPrice);
+                const mrp = Number(item.mrp);
+                const sellingPrice =
+                    Number(item.sellingPrice || mrp);
 
-                if (!productMrps.includes(mrp)) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Selected MRP not found in product"
-                    });
-                }
+                const gstpercentage =
+                    Number(product.gstRate || 0);
 
-                if (flavor && !productFlavors.includes(flavor)) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Selected flavor not found in product"
-                    });
-                }
+                const gst =
+                    (qty * costPrice * gstpercentage) / 100;
 
-                if (liters && !productLiters.includes(liters)) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Selected liters not found in product"
-                    });
-                }
-
-                if (barcode) {
-                    const exists = await Barcode.findOne({
-                        code: barcode,
-                        productId: product._id,
+                
+                await Product.updateOne(
+                    {
+                        _id: product._id,
                         superAdminId: hierarchy.superAdminId
-                    });
-
-                    if (!exists) {
-                        await Barcode.create({
-                            productId: product._id,
-                            code: barcode,
-                            isSold: false,
-                            superAdminId: hierarchy.superAdminId
-                        });
+                    },
+                    {
+                        $inc: {
+                            stock: qty
+                        }
                     }
-                }
+                );
 
-                totalAmount += qty * costPrice;
+                totalAmount +=
+                    (qty * costPrice) + gst;
 
                 processedItems.push({
+
                     productId: product._id,
-                    brand: product.brand || "",
-                    flavor,
-                    liters,
+
+                    hsnId: product.hsnId || null,
+
+                    hsnCode:
+                        product.hsnCode || "",
+
+                    gstpercentage,
+                    gst,
+
+                    categoryId:
+                        product.categoryId?._id,
+
+                    categoryName:
+                        product.categoryId?.name || "",
+
+                    brand:
+                        product.brand || "",
+
+                    flavor:
+                        item.flavor || "",
+
+                    litters:
+                        item.litters || "",
+
                     qty,
                     costPrice,
                     mrp,
                     sellingPrice,
-                    gst,
-                    unitType,
-                    unitValue,
-                    barcode,
-                    receivedQty: item.receivedQty || 0,
-                    pendingQty: qty - Number(item.receivedQty || 0)
+
+                    barcode:
+                        item.barcode || "",
+
+                    receivedQty:
+                        item.receivedQty || 0,
+
+                    pendingQty:
+                        item.pendingQty || qty
                 });
             }
 
-            purchase.supplierId = supplierId;
+           
+            let supplierData = {};
+
+            if (supplierId) {
+
+                const supplier = await Supplier.findOne({
+                    _id: supplierId,
+                    superAdminId: hierarchy.superAdminId
+                });
+
+                if (!supplier) {
+                    return res.status(404).json({
+                        success: false,
+                        message: "Supplier not found"
+                    });
+                }
+
+                supplierData = {
+                    supplierId: supplier._id,
+                    supplierName:
+                        supplier.supplierName || "",
+
+                    supplierEmail:
+                        supplier.email || ""
+                };
+            }
+
+           
+            purchase.invoiceNo =
+                invoiceNo || purchase.invoiceNo;
+
+            purchase.invoiceDate =
+                invoiceDate || purchase.invoiceDate;
+
             purchase.items = processedItems;
+
             purchase.totalAmount = totalAmount;
-            purchase.updatedBy = req.user.userId;
+
+            Object.assign(purchase, supplierData);
 
             await purchase.save();
 
-            res.json({
+            const updatedPurchase =
+                await Purchase.findById(purchase._id)
+                    .populate(
+                        "items.productId",
+                        "name brand"
+                    );
+
+            return res.status(200).json({
                 success: true,
                 message: "Purchase updated successfully",
-                data: purchase
+                data: updatedPurchase
             });
 
         } catch (err) {
-            res.status(500).json({
+
+            return res.status(500).json({
                 success: false,
                 message: "Server error",
                 error: err.message
@@ -578,9 +811,6 @@ router.delete(
         }
     }
 );
-
-
-
 
 
 module.exports = router;

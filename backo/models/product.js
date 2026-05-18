@@ -11,23 +11,23 @@ const productSchema = new mongoose.Schema({
         trim: true
     },
 
-    brand: {
-        type: String,
-        default: "",
-        trim: true
-    },
-
     stock: {
         type: Number,
         default: 0
     },
+
+    reservedStock: {
+        type: Number,
+        default: 0
+    },
+
 
     flavor: [{
         type: String,
         trim: true
     }],
 
-    liters: [{
+    litters: [{
         type: String,
         trim: true
     }],

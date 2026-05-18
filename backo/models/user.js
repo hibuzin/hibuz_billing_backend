@@ -2,23 +2,20 @@ const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema(
     {
-        name: {
+        CompanyName: {
             type: String,
-            required: true,
-            trim: true,
-            minlength: 2
+            required: true
         },
 
-        email: {
+        CompanyPhone: {
             type: String,
-            required: true,
-            lowercase: true,
-            trim: true
+            required: true
         },
 
-        superAdminId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User"
+        CompanyEmail: {
+            type: String,
+            required: true,
+            unique: true
         },
 
         password: {
@@ -27,6 +24,32 @@ const userSchema = new mongoose.Schema(
             minlength: 6,
             select: false
         },
+
+        address: {
+            type: String,
+            required: true
+        },
+
+        state: {
+            type: String,
+            required: true
+        },
+
+        pincode: {
+            type: String,
+            required: true
+        },
+
+        gstnumber: {
+            type: String,
+            required: true
+        },
+
+        city: {
+            type: String,
+            required: true
+        },
+
 
         role: {
             type: String,

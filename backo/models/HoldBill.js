@@ -34,7 +34,7 @@ const holdBillSchema = new mongoose.Schema({
             categoryName: String,
 
             flavor: String,
-            liters: String,
+            litters: String,
 
             qty: {
                 type: Number,

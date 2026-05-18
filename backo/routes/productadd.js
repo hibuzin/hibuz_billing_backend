@@ -21,7 +21,7 @@ router.post(
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
-            const { name, brand, categoryId, flavor, liters, mrps, hsnId } = req.body;
+            const { name, brand, categoryId, flavor, litters, mrps, hsnId } = req.body;
 
             if (!name || !categoryId) {
                 return res.status(400).json({
@@ -65,8 +65,8 @@ router.post(
                 ? flavor.map(x => String(x).trim()).filter(Boolean)
                 : [];
 
-            const processedLiters = Array.isArray(liters)
-                ? liters.map(x => String(x).trim()).filter(Boolean)
+            const processedLitters = Array.isArray(litters)
+                ? litters.map(x => String(x).trim()).filter(Boolean)
                 : [];
 
             const processedMrps = Array.isArray(mrps)
@@ -83,8 +83,13 @@ router.post(
             const product = await Product.create({
                 name: String(name).trim(),
                 brand: brand ? String(brand).trim() : "",
+
+                stock: 0,
+                reservedStock: 0,
+
+
                 flavor: processedFlavors,
-                liters: processedLiters,
+                litters: processedLitters,
                 mrps: processedMrps,
 
                 categoryId,
@@ -133,7 +138,7 @@ router.get(
             const product = await Product.findOne({
                 _id: productId,
                 superAdminId: hierarchy.superAdminId
-            }).select("name brand flavor liters variants");
+            }).select("name brand flavor litters variants");
 
             if (!product) {
                 return res.status(404).json({
@@ -148,7 +153,7 @@ router.get(
                 name: product.name,
                 brand: product.brand,
                 flavor: product.flavor,
-                size: product.size,
+                litters: product.litters,
                 mrps: product.variants.map(v => ({
                     variantId: v._id,
                     mrp: v.mrp
@@ -253,7 +258,7 @@ router.put(
     async (req, res) => {
         try {
             const { id } = req.params;
-            const { name, brand, categoryId, flavor, liters, mrps } = req.body;
+            const { name, brand, categoryId, flavor, litters, mrps } = req.body;
 
             if (!mongoose.Types.ObjectId.isValid(id)) {
                 return res.status(400).json({
@@ -301,8 +306,8 @@ router.put(
                     .filter(Boolean);
             }
 
-            if (Array.isArray(liters)) {
-                product.liters = liters
+            if (Array.isArray(litters)) {
+                product.litters = litters
                     .map(x => String(x).trim())
                     .filter(Boolean);
             }

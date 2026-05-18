@@ -58,16 +58,18 @@ router.get(
                     productName: product.name,
                     brand: product.brand || "",
 
+                    qty: barcode.qty || 1,
+                    availableQty: barcode.availableQty || 1,
+
                     hsnCode: product.hsnCode || "",
                     gstRate: product.gstRate || 0,
 
                     flavor: barcode.flavor || "",
-                    liters: barcode.liters || "",
+                    litters: barcode.litters || "",
 
                     mrp: barcode.mrp || product.mrp || 0,
                     sellingPrice: barcode.sellingPrice || product.sellingPrice || 0,
 
-                    stock: product.stock || 0,
                     isSold: barcode.isSold
                 }
             });

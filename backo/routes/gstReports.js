@@ -203,10 +203,21 @@ router.get(
         try {
 
             const hierarchy = attachHierarchy(req.user);
-            const { fromDate, toDate } = req.query;
+            const { fromDate, toDate, invoiceNo, period } = req.query;
 
             const filter = {
                 superAdminId: hierarchy.superAdminId
+            };
+
+            const parseDate = (dateStr, endOfDay = false) => {
+
+                const [day, month, year] = dateStr.split("-");
+
+                if (endOfDay) {
+                    return new Date(year, month - 1, day, 23, 59, 59);
+                }
+
+                return new Date(year, month - 1, day);
             };
 
             if (fromDate || toDate) {
@@ -214,12 +225,20 @@ router.get(
                 filter.createdAt = {};
 
                 if (fromDate) {
-                    filter.createdAt.$gte = new Date(fromDate);
+                    filter.createdAt.$gte = parseDate(fromDate);
                 }
 
                 if (toDate) {
-                    filter.createdAt.$lte = new Date(toDate);
+                    filter.createdAt.$lte = parseDate(toDate, true);
                 }
+            }
+
+
+            if (invoiceNo && invoiceNo.trim() !== "") {
+                filter.$or = [
+                    { invoiceNo: { $regex: invoiceNo.trim(), $options: "i" } },
+                    { purchaseNumber: { $regex: invoiceNo.trim(), $options: "i" } }
+                ];
             }
 
             const purchases = await Purchase.find(filter)
@@ -303,5 +322,7 @@ router.get(
         }
     }
 );
+
+
 
 module.exports = router;

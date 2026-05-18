@@ -44,9 +44,18 @@ const barcodeSchema = new mongoose.Schema({
         default: ""
     },
 
-    liters: {
+    litters: {
         type: String,
         default: ""
+    },
+
+    qty: {
+        type: Number,
+        default: 0
+    },
+    availableQty: {
+        type: Number,
+        default: 0
     },
 
     isSold: {

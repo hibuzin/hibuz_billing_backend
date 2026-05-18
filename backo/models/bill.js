@@ -1,26 +1,77 @@
 const mongoose = require("mongoose");
 
 const billSchema = new mongoose.Schema({
-
-
     items: [
         {
-            productId: mongoose.Schema.Types.ObjectId,
-            barcodeId: mongoose.Schema.Types.ObjectId,
-            customerId: Number,
+            productId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Product"
+            },
+            barcodeId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Barcode"
+            },
+            barcode: String,
+
             name: String,
+            brand: String,
+            flavor: String,
+            litters: String,
+
+            mrp: Number,
             price: Number,
-            gst: Number,
+
+            qty: {
+                type: Number,
+                default: 1
+            },
+
+            gstRate: Number,
             gstAmount: Number,
-            finalPrice: Number,
-            redeempoints: Number
+            finalPrice: Number
         }
     ],
 
     summary: {
-        subTotal: Number,
-        totalGST: Number,
-        grandTotal: Number
+        subTotal: {
+            type: Number,
+            default: 0
+        },
+        totalGST: {
+            type: Number,
+            default: 0
+        },
+        discount: {
+            type: Number,
+            default: 0
+        },
+        grandTotal: {
+            type: Number,
+            default: 0
+        }
+    },
+
+    customerId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Customer",
+        default: null
+    },
+
+    paymentMethod: {
+        type: String,
+        enum: ["cash", "card", "upi"],
+        default: "cash"
+    },
+
+    paymentStatus: {
+        type: String,
+        enum: ["paid", "pending", "cancelled"],
+        default: "paid"
+    },
+
+    role: {
+        type: String,
+        default: ""
     },
 
     superAdminId: {
@@ -37,32 +88,10 @@ const billSchema = new mongoose.Schema({
         index: true
     },
 
-    paymentMethod: {
-        type: String,
-        enum: ["cash", "card", "upi"],
-        default: "cash"
-    },
-
-    status: {
-        type: String,
-        enum: ["paid", "pending"],
-        default: "paid"
-    },
-
-    loyaltyPoints: {
-        type: Number,
-        default: 0,
-    },
-
-    totalSpent: {
-        type: Number,
-        default: 0,
-    },
-
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User"
-    },
+    }
 }, { timestamps: true });
 
 module.exports = mongoose.models.Bill || mongoose.model("Bill", billSchema);
