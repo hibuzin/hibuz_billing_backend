@@ -21,7 +21,7 @@ router.post(
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
-            const { name, brand, categoryId, flavor, litters, mrps, hsnId } = req.body;
+            const { name, brand, categoryId, flavor, litters, mrps, hsnCode } = req.body;
 
             if (!name || !categoryId) {
                 return res.status(400).json({
@@ -46,9 +46,10 @@ router.post(
 
             let hsnData = null;
 
-            if (hsnId) {
+            if (hsnCode) {
+
                 hsnData = await Hsn.findOne({
-                    _id: hsnId,
+                    hsnCode: String(hsnCode).trim(),
                     superAdminId: hierarchy.superAdminId,
                     isActive: true
                 });
@@ -56,7 +57,7 @@ router.post(
                 if (!hsnData) {
                     return res.status(404).json({
                         success: false,
-                        message: "HSN not found"
+                        message: "HSN code not found"
                     });
                 }
             }
@@ -94,7 +95,7 @@ router.post(
 
                 categoryId,
 
-                hsnId: hsnData ? hsnData._id : null,
+
                 hsnCode: hsnData ? hsnData.hsnCode : "",
                 gstRate: hsnData ? hsnData.gstRate : 0,
 
@@ -124,6 +125,7 @@ router.post(
         }
     }
 );
+
 
 router.get(
     "/product-mrps/:productId",

@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
+const mongoose = require("mongoose");
 const Bill = require("../models/Bill");
 const Product = require("../models/Product");
 const Barcode = require("../models/Barcode");
@@ -190,7 +191,10 @@ router.post(
                 customerId: customer ? customer._id : null,
                 paymentMethod: "cash",
                 paymentStatus: "paid",
-                createdBy: req.user.userId,
+
+                cashier: req.user.userId || req.user.id,   
+                createdBy: req.user.userId || req.user.id,
+
                 role: req.user.role,
                 ...hierarchy
             });
@@ -223,9 +227,40 @@ router.post(
 );
 
 
+router.get(
+    "/",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    async (req, res) => {
+        try {
+            const hierarchy = attachHierarchy(req.user);
+
+            const bills = await Bill.find({
+                superAdminId: hierarchy.superAdminId
+            })
+                .populate("customerId", "name phone customerId")
+                .populate("createdBy", "name email role")
+                .sort({ createdAt: -1 });
+
+            return res.status(200).json({
+                success: true,
+                message: "Bills fetched successfully",
+                count: bills.length,
+                data: bills
+            });
+
+        } catch (error) {
+            return res.status(500).json({
+                success: false,
+                message: "Server error",
+                error: error.message
+            });
+        }
+    }
+);
 
 
-// SALES CHECK - today / week / month / year
+
 router.get(
     "/sales-check",
     verifyToken,
@@ -306,7 +341,7 @@ router.get(
 
 
 
-// CASHIER WISE SALES CHECK
+
 router.get(
     "/cashier-wise-sales",
     verifyToken,

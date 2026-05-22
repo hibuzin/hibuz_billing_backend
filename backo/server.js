@@ -15,10 +15,11 @@ app.use(express.urlencoded({ extended: true }));
 
 
 const authRoutes = require("./routes/auth");
-const superAdminUserRoutes = require("./routes/superAdminUser");
-const superAdminRoutes = require("./routes/superAdmin");
+const superAdminControlRoutes = require("./routes/superAdminControl");
+const AdminUserRoutes = require("./routes/AdminUser");
+const superAdminProfileRoutes = require("./routes/superAdminProfile");
 const cashierRoutes = require("./routes/cashier");
-const adminsRoutes = require("./routes/admins");
+const adminRoutes = require("./routes/admin");
 const productsRoutes = require("./routes/products");
 const productaddRoutes = require("./routes/productadd")
 const scanRoutes = require("./routes/scan");
@@ -48,15 +49,20 @@ const brandRoutes = require("./routes/brand");
 const attributeRoutes = require("./routes/attribute");
 const locationRoutes = require("./routes/location");
 const hsnRoutes = require("./routes/hsn");
+const priceLevelRoutes = require("./routes/priceLevel");
+const duePaymentRoutes = require("./routes/duePayment");
+const sessionRoutes = require("./routes/session");
+
 
 
 
 
 app.use("/api/auth", authRoutes);
-app.use("/api/super-admin", superAdminUserRoutes);
-app.use("/api/super-admin", superAdminRoutes);
+app.use("/api/super-admin", superAdminControlRoutes);
+app.use("/api/admin", AdminUserRoutes);
+app.use("/api/superadmin", superAdminProfileRoutes);
 app.use("/api/cashier", cashierRoutes);
-app.use("/api/admins", adminsRoutes);
+app.use("/api/admin", adminRoutes);
 app.use("/api/products", productsRoutes);
 app.use("/api/productadd", productaddRoutes);
 app.use("/api/supplier", supplierRoutes);
@@ -86,7 +92,9 @@ app.use("/api/brands", brandRoutes);
 app.use("/api/attributes", attributeRoutes);
 app.use("/api/locations", locationRoutes);
 app.use("/api/hsn", hsnRoutes);
-
+app.use("/api/price-levels", priceLevelRoutes);
+app.use("/api/due-payment", duePaymentRoutes);
+app.use("/api/session", sessionRoutes);
 
 
 

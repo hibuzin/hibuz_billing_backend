@@ -8,6 +8,12 @@ const categorySchema = new mongoose.Schema(
             trim: true
         },
 
+        hsnId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Hsn"
+        },
+        hsnCode: String,
+        gstRate: Number,
         
         superAdminId: {
             type: mongoose.Schema.Types.ObjectId,

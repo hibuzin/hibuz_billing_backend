@@ -5,14 +5,22 @@ const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 
 const {
-    createUser
-} = require("../controllers/superAdminUser");
+    getAdminMe,
+    getAllCashiers
+} = require("../controllers/admin");
 
-router.post(
-    "/create-user",
+router.get(
+    "/me",
     verifyToken,
-    authorize("super_admin"),
-    createUser
+    authorize("admin"),
+    getAdminMe
+);
+
+router.get(
+    "/cashiers",
+    verifyToken,
+    authorize("admin"),
+    getAllCashiers
 );
 
 module.exports = router;

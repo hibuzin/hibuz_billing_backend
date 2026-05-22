@@ -6,7 +6,7 @@ const Category = require("../models/category");
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 const { attachHierarchy } = require("../utils/hierarchy");
-
+const Hsn = require("../models/Hsn");
 
 router.post(
     "/",
@@ -14,7 +14,13 @@ router.post(
     authorize("super_admin", "admin", "cashier"),
     async (req, res) => {
         try {
-            const { name } = req.body;
+            const {
+                name,
+                hsnCode,
+                description,
+                gstRate,
+                cess
+            } = req.body;
 
             if (!name) {
                 return res.status(400).json({
@@ -23,8 +29,15 @@ router.post(
                 });
             }
 
-            const hierarchy = attachHierarchy(req.user);
+            if (!hsnCode || gstRate == null) {
+                return res.status(400).json({
+                    success: false,
+                    message: "HSN code and GST rate required"
+                });
+            }
 
+            const hierarchy = attachHierarchy(req.user);
+            const userId = req.user.userId || req.user.id;
 
             const exists = await Category.findOne({
                 name: name.trim(),
@@ -38,17 +51,45 @@ router.post(
                 });
             }
 
+            let hsn = await Hsn.findOne({
+                hsnCode: String(hsnCode).trim(),
+                superAdminId: hierarchy.superAdminId
+            });
+
+            if (!hsn) {
+                const gst = Number(gstRate);
+
+                hsn = await Hsn.create({
+                    hsnCode: String(hsnCode).trim(),
+                    description,
+                    gstRate: gst,
+                    cgst: gst / 2,
+                    sgst: gst / 2,
+                    igst: gst,
+                    cess: cess || 0,
+                    category: name.trim(),
+                    ...hierarchy,
+                    createdBy: userId
+                });
+            }
+
             const category = await Category.create({
                 name: name.trim(),
+                hsnId: hsn._id,
+                hsnCode: hsn.hsnCode,
+                gstRate: hsn.gstRate,
                 ...hierarchy,
-                createdBy: req.user.userId,
+                createdBy: userId,
                 roleCreatedBy: req.user.role
             });
 
             res.status(201).json({
                 success: true,
-                message: "Category created successfully",
-                data: category
+                message: "Category and HSN created successfully",
+                data: {
+                    category,
+                    hsn
+                }
             });
 
         } catch (err) {
@@ -71,7 +112,7 @@ router.get(
 
             const hierarchy = attachHierarchy(req.user);
 
-           
+
             const categories = await Category.find({
                 superAdminId: hierarchy.superAdminId
             }).sort({
@@ -106,7 +147,7 @@ router.get(
 
             const hierarchy = attachHierarchy(req.user);
 
-            
+
             const category = await Category.findOne({
                 _id: id,
                 superAdminId: hierarchy.superAdminId
@@ -155,7 +196,7 @@ router.put(
 
             const hierarchy = attachHierarchy(req.user);
 
-            
+
             const category = await Category.findOneAndUpdate(
                 {
                     _id: id,
@@ -207,7 +248,7 @@ router.delete(
 
             const hierarchy = attachHierarchy(req.user);
 
-           
+
             const deleted = await Category.findOneAndDelete({
                 _id: id,
                 superAdminId: hierarchy.superAdminId
