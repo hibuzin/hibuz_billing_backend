@@ -10,9 +10,9 @@ const adminandcashierSchema = new mongoose.Schema(
 
         email: {
             type: String,
-            required: true,
             lowercase: true,
-            trim: true
+            trim: true,
+            default: ""
         },
 
         phone: {
@@ -65,7 +65,7 @@ const adminandcashierSchema = new mongoose.Schema(
 );
 
 adminandcashierSchema.index(
-    { email: 1, superAdminId: 1 },
+    { phone: 1, superAdminId: 1 },
     { unique: true }
 );
 

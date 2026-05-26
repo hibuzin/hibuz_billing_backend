@@ -99,7 +99,7 @@ customerSchema.index({
 customerSchema.set("toJSON", {
     transform: (doc, ret) => {
 
-       
+
         ret.id = ret.customerId;
 
         delete ret.customerId;
@@ -111,4 +111,6 @@ customerSchema.set("toJSON", {
 
 
 
-module.exports = mongoose.model("Customer", customerSchema);
+module.exports =
+    mongoose.models.Customer ||
+    mongoose.model("Customer", customerSchema);

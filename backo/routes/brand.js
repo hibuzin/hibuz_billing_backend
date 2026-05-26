@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const mongoose = require("mongoose");
-const Brand = require("../models/Brand");
+const Brand = require("../models/brand");
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 const { attachHierarchy } = require("../utils/hierarchy");

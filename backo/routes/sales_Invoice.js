@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const mongoose = require("mongoose");
-const SalesInvoice = require("../models/SalesInvoice");
+const SalesInvoice = require("../models/sales_Invoice");
 const Product = require("../models/Product");
 
 const { verifyToken } = require("../middleware/auth");

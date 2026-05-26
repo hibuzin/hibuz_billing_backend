@@ -3,9 +3,9 @@ const router = express.Router();
 
 const mongoose = require("mongoose");
 
-const Barcode = require("../models/Barcode");
+const Barcode = require("../models/barcode");
 const Product = require("../models/Product");
-const Purchase = require("../models/Purchase");
+const Purchase = require("../models/purchase");
 
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
@@ -31,7 +31,7 @@ router.get(
 
             const hierarchy = attachHierarchy(req.user);
 
-            
+
             const product = await Product.findOne({
                 _id: id,
                 superAdminId: hierarchy.superAdminId

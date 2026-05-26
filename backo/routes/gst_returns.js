@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const Bill = require("../models/Bill");
-const GstReturn = require("../models/GstReturn");
+const GstReturn = require("../models/gst_return");
 
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");

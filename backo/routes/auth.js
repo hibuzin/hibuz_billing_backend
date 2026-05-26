@@ -10,7 +10,6 @@ const {
     setupStatus,
     registerSuperAdmin,
     login,
-    createUser,
     changePassword,
     changeUserPasswordBySuperAdmin,
     forgotPassword,
@@ -27,12 +26,7 @@ router.post("/register-super-admin", registerSuperAdmin);
 
 router.post("/login", login);
 
-router.post(
-    "/create-user",
-    verifyToken,
-    authorize("super_admin", "admin"),
-    createUser
-);
+
 
 
 router.put(

@@ -8,8 +8,8 @@ const hsnSchema = new mongoose.Schema({
     },
 
     description: {
-        type: String,
-        required: true
+        type: String
+       
     },
 
     gstRate: {
@@ -60,4 +60,6 @@ const hsnSchema = new mongoose.Schema({
 
 }, { timestamps: true });
 
-module.exports = mongoose.model("Hsn", hsnSchema);
+module.exports =
+    mongoose.models.Hsn ||
+    mongoose.model("Hsn", hsnSchema);

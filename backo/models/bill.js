@@ -32,6 +32,12 @@ const billSchema = new mongoose.Schema({
         }
     ],
 
+    invoiceNo: {
+        type: String,
+        required: true,
+        unique: true
+    },
+
     summary: {
         subTotal: {
             type: Number,

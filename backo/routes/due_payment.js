@@ -8,7 +8,7 @@ const {
     createDuePayment,
     getAllDuePayments,
     payDuePayment
-} = require("../controllers/duePayment");
+} = require("../controllers/due_payment");
 
 router.post(
     "/add",

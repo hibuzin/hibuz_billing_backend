@@ -27,27 +27,27 @@ const userSchema = new mongoose.Schema(
 
         address: {
             type: String,
-            required: true
+            default: ""
         },
 
         state: {
             type: String,
-            required: true
+            default: ""
         },
 
         pincode: {
             type: String,
-            required: true
-        },
-
-        gstnumber: {
-            type: String,
-            required: true
+            default: ""
         },
 
         city: {
             type: String,
-            required: true
+            default: ""
+        },
+
+        gstnumber: {
+            type: String,
+            default: ""
         },
 
 

@@ -1,15 +1,16 @@
 const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
-const adminandcashier = require("../models/adminandcashier");
+const adminandcashier = require("../models/admin_and_cashier");
 
 exports.createUser = async (req, res) => {
     try {
+
         const { name, email, phone, password, role } = req.body;
 
-        if (!name || !email || !phone || !password || !role) {
+        if (!name || !phone || !password || !role) {
             return res.status(400).json({
                 success: false,
-                message: "All fields are required"
+                message: "Name, phone, password and role are required"
             });
         }
 
@@ -20,31 +21,43 @@ exports.createUser = async (req, res) => {
             });
         }
 
-        const superAdminId = req.user.userId;
-        const loginEmail = email.trim().toLowerCase();
+        const superAdminId = req.user.userId || req.user.id;
 
-        const existingUser = await adminandcashier.findOne({
-            email: loginEmail,
-            superAdminId
-        });
+        let loginEmail = "";
 
-        if (existingUser) {
-            return res.status(400).json({
-                success: false,
-                message: "User already exists in your company"
+        if (email) {
+            loginEmail = email.trim().toLowerCase();
+
+            const existingUser = await adminandcashier.findOne({
+                email: loginEmail,
+                superAdminId
             });
+
+            if (existingUser) {
+                return res.status(400).json({
+                    success: false,
+                    message: "User already exists in your company"
+                });
+            }
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const user = await adminandcashier.create({
-            name,
-            email: loginEmail,
-            phone,
+            name: String(name).trim(),
+
+            email: loginEmail || "",
+
+            phone: String(phone).trim(),
+
             password: hashedPassword,
+
             role,
+
             createdBy: superAdminId,
+
             superAdminId,
+
             adminId: null
         });
 
@@ -65,11 +78,13 @@ exports.createUser = async (req, res) => {
         });
 
     } catch (err) {
+
         return res.status(500).json({
             success: false,
             message: "Server error",
             error: err.message
         });
+
     }
 };
 

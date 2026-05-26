@@ -1,5 +1,5 @@
 const bcrypt = require("bcryptjs");
-const adminandcashier = require("../models/adminandcashier");
+const admin_and_cashier = require("../models/admin_and_cashier");
 
 exports.adminCreateCashier = async (req, res) => {
     try {
@@ -23,7 +23,7 @@ exports.adminCreateCashier = async (req, res) => {
         const adminId = req.user.userId;
         const superAdminId = req.user.superAdminId;
 
-        const existingUser = await adminandcashier.findOne({
+        const existingUser = await admin_and_cashier.findOne({
             email,
             superAdminId
         });
@@ -37,7 +37,7 @@ exports.adminCreateCashier = async (req, res) => {
 
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const cashier = await adminandcashier.create({
+        const cashier = await admin_and_cashier.create({
             name,
             email,
             phone,
@@ -104,7 +104,7 @@ exports.changeCashierPassword = async (req, res) => {
             adminId = req.user.userId;
         }
 
-        const cashier = await adminandcashier.findOne({
+        const cashier = await admin_and_cashier.findOne({
             _id: id,
             role: "cashier",
             superAdminId

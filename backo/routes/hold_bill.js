@@ -2,10 +2,10 @@ const express = require("express");
 const router = express.Router();
 
 const mongoose = require("mongoose");
-const Customer = require("../models/Customer");
-const HoldBill = require("../models/HoldBill");
+const Customer = require("../models/customer");
+const HoldBill = require("../models/hold_bill");
 const Product = require("../models/Product");
-const Counter = require("../models/Counter");
+const Counter = require("../models/counter");
 
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");

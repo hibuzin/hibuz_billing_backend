@@ -10,7 +10,7 @@ const {
     createSeperateAccount,
     getSeperateAccount,
     updateSeperateAccount
-} = require("../controllers/superAdminProfile");
+} = require("../controllers/super_admin_profile");
 
 
 router.post(
@@ -35,6 +35,7 @@ router.get(
     authorize("super_admin"),
     getSeperateAccount
 );
+
 
 router.put(
     "/me",

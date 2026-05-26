@@ -17,7 +17,7 @@ const {
     deleteCashier
 
 
-} = require("../controllers/superAdminControl");
+} = require("../controllers/super_admin_control");
 
 router.post(
     "/create-user",

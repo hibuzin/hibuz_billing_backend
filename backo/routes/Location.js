@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const Location = require("../models/Location");
+const Location = require("../models/location");
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 const { attachHierarchy } = require("../utils/hierarchy");

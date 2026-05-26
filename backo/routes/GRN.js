@@ -4,8 +4,8 @@ const router = express.Router();
 const mongoose = require("mongoose");
 
 const Product = require("../models/Product");
-const Purchase = require("../models/Purchase");
-const GRN = require("../models/GRN");
+const Purchase = require("../models/purchase");
+const GRN = require("../models/grn");
 
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
@@ -222,289 +222,289 @@ router.get(
 );
 
 
-router.post("/grn/partial",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
+router.post("/grn/partial", verifyToken, authorize("super_admin", "admin", "cashier"), async (req, res) => {
 
-        try {
+  try {
 
-            const {
-                purchaseId,
-                items
-            } = req.body;
+    const {
+      purchaseId,
+      items
+    } = req.body;
 
-            if (!purchaseId || !Array.isArray(items)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "purchaseId and items required"
-                });
-            }
-
-            const hierarchy = attachHierarchy(req.user);
-
-            
-            const purchase = await Purchase.findOne({
-                _id: purchaseId,
-                superAdminId: hierarchy.superAdminId
-            });
-
-            if (!purchase) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Purchase not found"
-                });
-            }
-
-            const grnItems = [];
-
-            
-            for (const incomingItem of items) {
-
-                const purchaseItem = purchase.items.find(
-                    p =>
-                        p.productId.toString() ===
-                        incomingItem.productId
-                );
-
-                if (!purchaseItem) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Invalid product in purchase"
-                    });
-                }
-
-                const receiveQty = Number(incomingItem.qty);
-
-                if (receiveQty <= 0) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Invalid receive qty"
-                    });
-                }
-
-                const pendingQty =
-                    purchaseItem.qty -
-                    (purchaseItem.receivedQty || 0);
-
-                if (receiveQty > pendingQty) {
-                    return res.status(400).json({
-                        success: false,
-                        message:
-                            `Receive qty exceeds pending qty for product`
-                    });
-                }
-
-               
-                purchaseItem.receivedQty =
-                    (purchaseItem.receivedQty || 0)
-                    + receiveQty;
-
-                purchaseItem.pendingQty =
-                    purchaseItem.qty -
-                    purchaseItem.receivedQty;
-
-                await Product.updateOne(
-                    {
-                        _id: incomingItem.productId,
-                        superAdminId: hierarchy.superAdminId
-                    },
-                    {
-                        $inc: {
-                            stock: receiveQty
-                        }
-                    }
-                );
-
-                grnItems.push({
-                    productId: incomingItem.productId,
-                    qty: receiveQty,
-                    costPrice: incomingItem.costPrice || 0
-                });
-            }
-
-            
-            await purchase.save();
-
-            
-            const grn = await GRN.create({
-
-                purchaseId,
-
-                items: grnItems,
-
-                totalItems: grnItems.length,
-
-                isPartial: true,
-
-                ...hierarchy
-            });
-
-            res.status(201).json({
-                success: true,
-                message: "Partial GRN completed",
-                data: grn
-            });
-
-        } catch (err) {
-
-            console.error("PARTIAL GRN ERROR:", err);
-
-            res.status(500).json({
-                success: false,
-                message: "Server error",
-                error: err.message
-            });
-        }
+    if (!purchaseId || !Array.isArray(items)) {
+      return res.status(400).json({
+        success: false,
+        message: "purchaseId and items required"
+      });
     }
+
+    const hierarchy = attachHierarchy(req.user);
+
+
+    const purchase = await Purchase.findOne({
+      _id: purchaseId,
+      superAdminId: hierarchy.superAdminId
+    });
+
+    if (!purchase) {
+      return res.status(404).json({
+        success: false,
+        message: "Purchase not found"
+      });
+    }
+
+    const grnItems = [];
+
+
+    for (const incomingItem of items) {
+
+      const purchaseItem = purchase.items.find(
+        p =>
+          p.productId.toString() ===
+          incomingItem.productId
+      );
+
+      if (!purchaseItem) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid product in purchase"
+        });
+      }
+
+      const receiveQty = Number(incomingItem.qty);
+
+      if (receiveQty <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid receive qty"
+        });
+      }
+
+      const pendingQty =
+        purchaseItem.qty -
+        (purchaseItem.receivedQty || 0);
+
+      if (receiveQty > pendingQty) {
+        return res.status(400).json({
+          success: false,
+          message:
+            `Receive qty exceeds pending qty for product`
+        });
+      }
+
+
+      purchaseItem.receivedQty =
+        (purchaseItem.receivedQty || 0)
+        + receiveQty;
+
+      purchaseItem.pendingQty =
+        purchaseItem.qty -
+        purchaseItem.receivedQty;
+
+      await Product.updateOne(
+        {
+          _id: incomingItem.productId,
+          superAdminId: hierarchy.superAdminId
+        },
+        {
+          $inc: {
+            stock: receiveQty
+          }
+        }
+      );
+
+      grnItems.push({
+        productId: incomingItem.productId,
+        qty: receiveQty,
+        costPrice: incomingItem.costPrice || 0
+      });
+    }
+
+
+    await purchase.save();
+
+
+    const grn = await GRN.create({
+
+      purchaseId,
+
+      items: grnItems,
+
+      totalItems: grnItems.length,
+
+      isPartial: true,
+
+      ...hierarchy
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Partial GRN completed",
+      data: grn
+    });
+
+  } catch (err) {
+
+    console.error("PARTIAL GRN ERROR:", err);
+
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: err.message
+    });
+  }
+}
 );
 
-router.post("/grn/scan",verifyToken,authorize("super_admin", "admin", "cashier"),async (req, res) => {
-        try {
-            const {
-                purchaseId,
-                code,
-                qty = 1
-            } = req.body;
+router.post("/grn/scan", verifyToken, authorize("super_admin", "admin", "cashier"), async (req, res) => {
+  try {
+    const {
+      purchaseId,
+      code,
+      qty = 1
+    } = req.body;
 
-            if (!purchaseId || !code) {
-                return res.status(400).json({
-                    success: false,
-                    message: "purchaseId and barcode code required"
-                });
-            }
-
-            const receiveQty = Number(qty);
-
-            if (receiveQty <= 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid quantity"
-                });
-            }
-
-            const hierarchy = attachHierarchy(req.user);
-
-         
-            const purchase = await Purchase.findOne({
-                _id: purchaseId,
-                superAdminId: hierarchy.superAdminId
-            });
-
-            if (!purchase) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Purchase not found"
-                });
-            }
-
-            
-            const barcode = await Barcode.findOne({
-                code: String(code).trim(),
-                superAdminId: hierarchy.superAdminId
-            });
-
-            if (!barcode) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Barcode not found"
-                });
-            }
-
-            
-            const product = await Product.findOne({
-                _id: barcode.productId,
-                superAdminId: hierarchy.superAdminId
-            });
-
-            if (!product) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Product not found"
-                });
-            }
-
-           
-            const purchaseItem = purchase.items.find(
-                item => item.productId.toString() === product._id.toString()
-            );
-
-            if (!purchaseItem) {
-                return res.status(400).json({
-                    success: false,
-                    message: "This product is not in this purchase"
-                });
-            }
-
-            const orderedQty = Number(purchaseItem.qty);
-            const alreadyReceived = Number(purchaseItem.receivedQty || 0);
-            const pendingQty = orderedQty - alreadyReceived;
-
-            if (receiveQty > pendingQty) {
-                return res.status(400).json({
-                    success: false,
-                    message: `Receive quantity exceeds pending quantity. Pending: ${pendingQty}`
-                });
-            }
-
-           
-            purchaseItem.receivedQty = alreadyReceived + receiveQty;
-            purchaseItem.pendingQty = orderedQty - purchaseItem.receivedQty;
-
-          
-            await Product.updateOne(
-                {
-                    _id: product._id,
-                    superAdminId: hierarchy.superAdminId
-                },
-                {
-                    $inc: {
-                        stock: receiveQty
-                    }
-                }
-            );
-
-            await purchase.save();
-
-           
-            const grn = await GRN.create({
-                purchaseId: purchase._id,
-                items: [
-                    {
-                        productId: product._id,
-                        qty: receiveQty,
-                        costPrice: purchaseItem.costPrice || product.costPrice || 0,
-                        barcodeId: barcode._id,
-                        barcode: barcode.code
-                    }
-                ],
-                totalItems: receiveQty,
-                isPartial: purchaseItem.pendingQty > 0,
-                receivedByScan: true,
-                ...hierarchy
-            });
-
-            res.status(201).json({
-                success: true,
-                message: "GRN barcode scan completed",
-                data: {
-                    grn,
-                    product: {
-                        id: product._id,
-                        name: product.name,
-                        receivedQty: receiveQty,
-                        pendingQty: purchaseItem.pendingQty
-                    }
-                }
-            });
-
-        } catch (err) {
-            console.error("GRN SCAN ERROR:", err);
-
-            res.status(500).json({
-                success: false,
-                message: "Server error",
-                error: err.message
-            });
-        }
+    if (!purchaseId || !code) {
+      return res.status(400).json({
+        success: false,
+        message: "purchaseId and barcode code required"
+      });
     }
+
+    const receiveQty = Number(qty);
+
+    if (receiveQty <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid quantity"
+      });
+    }
+
+    const hierarchy = attachHierarchy(req.user);
+
+
+    const purchase = await Purchase.findOne({
+      _id: purchaseId,
+      superAdminId: hierarchy.superAdminId
+    });
+
+    if (!purchase) {
+      return res.status(404).json({
+        success: false,
+        message: "Purchase not found"
+      });
+    }
+
+
+    const barcode = await Barcode.findOne({
+      code: String(code).trim(),
+      superAdminId: hierarchy.superAdminId
+    });
+
+    if (!barcode) {
+      return res.status(404).json({
+        success: false,
+        message: "Barcode not found"
+      });
+    }
+
+
+    const product = await Product.findOne({
+      _id: barcode.productId,
+      superAdminId: hierarchy.superAdminId
+    });
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Product not found"
+      });
+    }
+
+
+    const purchaseItem = purchase.items.find(
+      item => item.productId.toString() === product._id.toString()
+    );
+
+    if (!purchaseItem) {
+      return res.status(400).json({
+        success: false,
+        message: "This product is not in this purchase"
+      });
+    }
+
+    const orderedQty = Number(purchaseItem.qty);
+    const alreadyReceived = Number(purchaseItem.receivedQty || 0);
+    const pendingQty = orderedQty - alreadyReceived;
+
+    if (receiveQty > pendingQty) {
+      return res.status(400).json({
+        success: false,
+        message: `Receive quantity exceeds pending quantity. Pending: ${pendingQty}`
+      });
+    }
+
+
+    purchaseItem.receivedQty = alreadyReceived + receiveQty;
+    purchaseItem.pendingQty = orderedQty - purchaseItem.receivedQty;
+
+
+    await Product.updateOne(
+      {
+        _id: product._id,
+        superAdminId: hierarchy.superAdminId
+      },
+      {
+        $inc: {
+          stock: receiveQty
+        }
+      }
+    );
+
+    await purchase.save();
+
+
+    const grn = await GRN.create({
+      purchaseId: purchase._id,
+      items: [
+        {
+          productId: product._id,
+          qty: receiveQty,
+          costPrice: purchaseItem.costPrice || product.costPrice || 0,
+          barcodeId: barcode._id,
+          barcode: barcode.code
+        }
+      ],
+      totalItems: receiveQty,
+      isPartial: purchaseItem.pendingQty > 0,
+      receivedByScan: true,
+      ...hierarchy
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "GRN barcode scan completed",
+      data: {
+        grn,
+        product: {
+          id: product._id,
+          name: product.name,
+          receivedQty: receiveQty,
+          pendingQty: purchaseItem.pendingQty
+        }
+      }
+    });
+
+  } catch (err) {
+    console.error("GRN SCAN ERROR:", err);
+
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+      error: err.message
+    });
+  }
+}
 );
 
 module.exports = router;

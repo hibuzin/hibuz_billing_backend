@@ -1,4 +1,4 @@
-const adminandcashier = require("../models/adminandcashier");
+const adminandcashier = require("../models/admin_and_cashier");
 
 exports.getAdminMe = async (req, res) => {
     try {

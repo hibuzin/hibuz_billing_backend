@@ -4,7 +4,7 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { blacklistToken } = require("../middleware/auth");
-const Staff = require("../models/adminandcashier");
+const adminandcashier = require("../models/admin_and_cashier");
 const mongoose = require("mongoose");
 
 
@@ -50,20 +50,17 @@ exports.registerSuperAdmin = async (req, res) => {
             address,
             state,
             pincode,
-            gstnumber,
-            city
+            city,
+            gstnumber
+
         } = req.body;
 
         if (
             !CompanyName ||
             !CompanyPhone ||
             !CompanyEmail ||
-            !password ||
-            !address ||
-            !state ||
-            !pincode ||
-            !gstnumber ||
-            !city
+            !password
+
         ) {
             return res.status(400).json({
                 success: false,
@@ -83,7 +80,8 @@ exports.registerSuperAdmin = async (req, res) => {
         }
 
         const existingUser = await User.findOne({
-            CompanyEmail
+            CompanyEmail: CompanyEmail.trim().toLowerCase()
+
         });
 
         if (existingUser) {
@@ -96,15 +94,26 @@ exports.registerSuperAdmin = async (req, res) => {
         const hashed = await bcrypt.hash(password, 10);
 
         const user = new User({
-            CompanyName,
-            CompanyPhone,
-            CompanyEmail,
+            CompanyName: CompanyName.trim(),
+
+            CompanyPhone: CompanyPhone.trim(),
+
+            CompanyEmail:
+                CompanyEmail.trim().toLowerCase(),
+
             password: hashed,
-            address,
-            state,
-            pincode,
-            gstnumber,
-            city,
+
+            address: address ? address.trim() : "",
+
+            state: state ? state.trim() : "",
+
+            pincode: pincode ? pincode.trim() : "",
+
+            city: city ? city.trim() : "",
+
+            gstnumber: gstnumber
+                ? gstnumber.trim().toUpperCase()
+                : "",
             role: "super_admin"
         });
 
@@ -118,11 +127,27 @@ exports.registerSuperAdmin = async (req, res) => {
                 CompanyName: user.CompanyName,
                 CompanyPhone: user.CompanyPhone,
                 CompanyEmail: user.CompanyEmail,
-                address: user.address,
-                state: user.state,
-                pincode: user.pincode,
-                gstnumber: user.gstnumber,
-                city: user.city,
+
+                ...(user.address && {
+                    address: user.address
+                }),
+
+                ...(user.state && {
+                    state: user.state
+                }),
+
+                ...(user.pincode && {
+                    pincode: user.pincode
+                }),
+
+                ...(user.city && {
+                    city: user.city
+                }),
+
+                ...(user.gstnumber && {
+                    gstnumber: user.gstnumber
+                }),
+
                 role: user.role
             }
         });
@@ -136,107 +161,40 @@ exports.registerSuperAdmin = async (req, res) => {
     }
 };
 
-exports.createUser = async (req, res) => {
-    try {
-        const { name, email, phone, password, role } = req.body;
 
-        if (!name || !email || !phone || !password || !role) {
-            return res.status(400).json({
-                success: false,
-                message: "All fields are required"
-            });
-        }
 
-        if (!["admin", "cashier"].includes(role)) {
-            return res.status(400).json({
-                success: false,
-                message: "Only admin or cashier allowed"
-            });
-        }
 
-        const existingStaff = await Staff.findOne({
-            email,
-            superAdminId: req.user.superAdminId || req.user.userId
-        });
-
-        if (existingStaff) {
-            return res.status(400).json({
-                success: false,
-                message: "Email already exists"
-            });
-        }
-
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        const newStaff = new Staff({
-            name,
-            email,
-            phone,
-            password: hashedPassword,
-            role,
-            superAdminId: req.user.superAdminId || req.user.userId,
-            adminId: role === "cashier" && req.user.role === "admin" ? req.user.userId : null,
-            createdBy: req.user.userId,
-            isActive: true
-        });
-
-        await newStaff.save();
-
-        res.status(201).json({
-            success: true,
-            message: `${role} created successfully`,
-            data: {
-                _id: newStaff._id,
-                name: newStaff.name,
-                email: newStaff.email,
-                phone: newStaff.phone,
-                role: newStaff.role,
-                superAdminId: newStaff.superAdminId,
-                adminId: newStaff.adminId,
-                createdBy: newStaff.createdBy,
-                isActive: newStaff.isActive,
-                createdAt: newStaff.createdAt
-            }
-        });
-
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-    }
-};
 
 exports.login = async (req, res) => {
     try {
-        const { email, CompanyEmail, password } = req.body;
+        const { email, CompanyEmail, phone, password } = req.body;
 
-        const loginEmail = email || CompanyEmail; 
+        const loginValue = (email || CompanyEmail || phone)?.trim().toLowerCase();
 
-        if (!loginEmail || !password) {
+        if (!loginValue || !password) {
             return res.status(400).json({
                 success: false,
-                message: "Email and password are required"
+                message: "Email/phone and password are required"
             });
         }
 
-        let user = await User.findOne({ CompanyEmail: loginEmail }).select("+password");
+        let user = await User.findOne({
+            CompanyEmail: loginValue
+        }).select("+password");
 
         if (!user) {
-            user = await Staff.findOne({ email: loginEmail }).select("+password");
+            user = await adminandcashier.findOne({
+                $or: [
+                    { email: loginValue },
+                    { phone: loginValue }
+                ]
+            }).select("+password");
         }
 
         if (!user) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid credentials"
-            });
-        }
-
-        if (!user.password) {
-            return res.status(500).json({
-                success: false,
-                message: "Password not loaded. Check schema select:false and .select('+password')"
             });
         }
 
@@ -259,7 +217,7 @@ exports.login = async (req, res) => {
             adminId = user._id;
         } else if (user.role === "cashier") {
             superAdminId = user.superAdminId;
-            adminId = user.adminId;
+            adminId = user.adminId || null;
         }
 
         const token = jwt.sign(
@@ -273,33 +231,38 @@ exports.login = async (req, res) => {
             { expiresIn: "7d" }
         );
 
-        
         user.lastLogin = new Date();
         await user.save();
+
+        let userData = {
+            userId: user._id,
+            role: user.role
+        };
+
+        if (user.role === "super_admin") {
+            userData = {
+                ...userData,
+                CompanyName: user.CompanyName,
+                CompanyPhone: user.CompanyPhone,
+                CompanyEmail: user.CompanyEmail,
+                superAdminId
+            };
+        } else {
+            userData = {
+                ...userData,
+                name: user.name,
+                email: user.email || "",
+                phone: user.phone,
+                adminId,
+                superAdminId
+            };
+        }
 
         return res.status(200).json({
             success: true,
             message: "Login successful",
             token,
-            user: {
-                userId: user._id,
-                name: user.name || user.CompanyName,
-                email: user.email || user.CompanyEmail,
-                phone: user.phone || user.CompanyPhone,
-                role: user.role,
-
-                CompanyName: user.CompanyName || null,
-                CompanyPhone: user.CompanyPhone || null,
-                CompanyEmail: user.CompanyEmail || null,
-                address: user.address || null,
-                state: user.state || null,
-                city: user.city || null,
-                pincode: user.pincode || null,
-                gstnumber: user.gstnumber || null,
-
-                ...(adminId && { adminId }),
-                ...(superAdminId && { superAdminId })
-            }
+            user: userData
         });
 
     } catch (error) {
@@ -334,7 +297,7 @@ exports.changePassword = async (req, res) => {
         if (req.user.role === "super_admin") {
             account = await User.findById(req.user.userId).select("+password");
         } else {
-            account = await Staff.findById(req.user.userId).select("+password");
+            account = await adminandcashier.findById(req.user.userId).select("+password");
         }
 
         if (!account) {

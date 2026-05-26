@@ -4,13 +4,13 @@ const router = express.Router();
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 
-const adminUserController = require("../controllers/AdminUser");
+const admin_userController = require("../controllers/admin_user");
 
 router.post(
     "/create-cashier",
     verifyToken,
     authorize("admin"),
-    adminUserController.adminCreateCashier
+    admin_userController.adminCreateCashier
 );
 
 module.exports = router;

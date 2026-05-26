@@ -3,7 +3,7 @@ const router = express.Router();
 
 const Product = require("../models/Product");
 const User = require("../models/user");
-const StockRebilling = require("../models/StockRebilling");
+const StockRebilling = require("../models/stock_rebilling");
 
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");

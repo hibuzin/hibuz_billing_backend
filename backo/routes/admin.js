@@ -9,6 +9,7 @@ const {
     getAllCashiers
 } = require("../controllers/admin");
 
+
 router.get(
     "/me",
     verifyToken,

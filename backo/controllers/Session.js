@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
-const Session = require("../models/Session");
-const Bill = require("../models/Bill");
+const Session = require("../models/session");
+const Bill = require("../models/bill");
 
 exports.startSession = async (req, res) => {
     try {

@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const mongoose = require("mongoose");
-const Damage = require("../models/Damage");
+const Damage = require("../models/damage");
 const Product = require("../models/Product");
 
 const { verifyToken } = require("../middleware/auth");

@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
-const Product = require("../models/Product");
-const PriceLevel = require("../models/PriceLevel");
+const Product = require("../models/product");
+const PriceLevel = require("../models/price_level");
 const { attachHierarchy } = require("../utils/hierarchy");
 
 exports.configurePriceLevel = async (req, res) => {
@@ -270,3 +270,4 @@ exports.deletePriceLevel = async (req, res) => {
         });
     }
 };
+

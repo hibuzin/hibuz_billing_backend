@@ -10,7 +10,7 @@ const {
     getProductPriceLevel,
     updatePriceLevel,
     deletePriceLevel
-} = require("../controllers/priceLevel");
+} = require("../controllers/price_level");
 
 router.post(
     "/configure",

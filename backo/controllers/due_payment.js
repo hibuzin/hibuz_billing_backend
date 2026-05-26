@@ -1,4 +1,4 @@
-const DuePayment = require("../models/DuePayment");
+const DuePayment = require("../models/due_payment");
 const { attachHierarchy } = require("../utils/hierarchy");
 
 exports.createDuePayment = async (req, res) => {

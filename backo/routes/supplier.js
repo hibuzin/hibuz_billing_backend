@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
 
-const Supplier = require("../models/Supplier");
-const Counter = require("../models/Counter");
+const Supplier = require("../models/supplier");
+const Counter = require("../models/counter");
 
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
@@ -10,10 +10,10 @@ const { attachHierarchy } = require("../utils/hierarchy");
 
 const getNextSupplierId = async () => {
     const counter = await Counter.findOneAndUpdate(
-    { name: "supplier" },
-    { $inc: { seq: 1 } },
-    { returnDocument: "after", upsert: true }
-);
+        { name: "supplier" },
+        { $inc: { seq: 1 } },
+        { returnDocument: "after", upsert: true }
+    );
 
     return `SUP${String(counter.seq).padStart(3, "0")}`;
 };

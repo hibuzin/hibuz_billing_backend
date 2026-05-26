@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const Attribute = require("../models/Attribute");
+const attribute = require("../models/attribute");
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 const { attachHierarchy } = require("../utils/hierarchy");

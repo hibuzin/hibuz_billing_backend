@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const Product = require("../models/Product");
-const Barcode = require("../models/Barcode");
+const Barcode = require("../models/barcode");
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 const { attachHierarchy } = require("../utils/hierarchy");
@@ -57,7 +57,7 @@ router.post(
             const hierarchy = attachHierarchy(req.user);
             const productName = name.trim();
 
-           
+
             const category = await Category.findOne({
                 _id: categoryId,
                 superAdminId: hierarchy.superAdminId
@@ -70,7 +70,7 @@ router.post(
                 });
             }
 
-           
+
             const existingProduct = await Product.findOne({
                 name: productName,
                 superAdminId: hierarchy.superAdminId
@@ -104,7 +104,7 @@ router.post(
                 });
             }
 
-           
+
             const product = await Product.create({
                 name: productName,
                 costPrice: costPriceNumber,
@@ -119,7 +119,7 @@ router.post(
                 ...hierarchy
             });
 
-           
+
             let barcodes = [];
 
             if (barcodeTotal > 0) {

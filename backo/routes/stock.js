@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const Product = require("../models/Product");
-const Purchase = require("../models/Purchase");
+const Purchase = require("../models/purchase");
 
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");

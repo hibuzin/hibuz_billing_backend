@@ -1,16 +1,12 @@
-const User = require("../models/User");
+const User = require("../models/user");
 const mongoose = require("mongoose");
-const Seperate = require("../models/Seperate");
+const Seperate = require("../models/seperate");
 
 
 exports.createSeperateAccount = async (req, res) => {
     try {
-
-        const {
-            name,
-            email,
-            phone
-        } = req.body;
+        const { name, email, phone } = req.body;
+        const userId = req.user.userId || req.user.id;
 
         if (!name || !email || !phone) {
             return res.status(400).json({
@@ -19,42 +15,56 @@ exports.createSeperateAccount = async (req, res) => {
             });
         }
 
+        const superAdmin = await User.findOne({
+            _id: userId,
+            role: "super_admin"
+        }).select("+password");
 
-
-        const existingSeperate = await Seperate.findOne({
-            email: email.trim().toLowerCase()
-        });
-
-        if (existingSeperate) {
-            return res.status(400).json({
+        if (!superAdmin) {
+            return res.status(404).json({
                 success: false,
-                message: "Email already exists"
+                message: "Super Admin not found"
             });
         }
 
-        const seperate = new Seperate({
+        const alreadyCreated = await Seperate.findOne({
+            createdBy: userId
+        });
+
+        if (alreadyCreated) {
+            return res.status(400).json({
+                success: false,
+                message: "My account already created"
+            });
+        }
+
+
+
+        const seperate = await Seperate.create({
             name: name.trim(),
             email: email.trim().toLowerCase(),
             phone: phone.trim(),
-            createdBy: req.user.userId || req.user.id
+            password: superAdmin.password,
+            createdBy: userId
         });
-
-        await seperate.save();
 
         return res.status(201).json({
             success: true,
-            message: "Seperate account created successfully",
-            data: seperate
+            message: "My account saved successfully",
+            data: {
+                _id: seperate._id,
+                name: seperate.name,
+                email: seperate.email,
+                phone: seperate.phone
+            }
         });
 
     } catch (err) {
-
         return res.status(500).json({
             success: false,
             message: "Server error",
             error: err.message
         });
-
     }
 };
 
