@@ -28,14 +28,14 @@ const duePaymentSchema = new mongoose.Schema(
             required: true
         },
 
-        status: {
+        paymentStatus: {
             type: String,
-            enum: ["pending", "partial", "paid"],
-            default: "pending"
+            enum: ["paid", "partial", "due"],
+            default: "paid"
         },
 
         dueDate: {
-            type: Date
+            type: String
         },
 
         superAdminId: {

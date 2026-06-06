@@ -20,8 +20,7 @@ const purchaseSchema = new mongoose.Schema({
     },
 
     invoiceDate: {
-        type: Date,
-        default: Date.now
+        type: String
 
     },
 
@@ -33,6 +32,10 @@ const purchaseSchema = new mongoose.Schema({
                 required: true
             },
 
+            productName: {
+                type: String,
+                default: ""
+            },
 
 
             hsnId: {
@@ -161,6 +164,30 @@ const purchaseSchema = new mongoose.Schema({
                 type: Number,
                 default: 0
             }
+        }
+    ],
+
+    supplierBillAmount: {
+        type: Number,
+        default: 0
+    },
+    paidAmount: {
+        type: Number,
+        default: 0
+    },
+    balanceAmount: {
+        type: Number,
+        default: 0
+    },
+
+    paymentHistory: [
+        {
+            amount: Number,
+            paidDate: {
+                type: Date,
+                default: Date.now
+            },
+            note: String
         }
     ],
 

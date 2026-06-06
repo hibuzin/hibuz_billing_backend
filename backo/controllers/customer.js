@@ -2,7 +2,9 @@ const mongoose = require("mongoose");
 const Customer = require("../models/customer");
 const user = require("../models/user");
 const Counter = require("../models/counter");
+const Bill = require("../models/bill");
 const { attachHierarchy } = require("../utils/hierarchy");
+const DuePayment = require("../models/due_payment");
 
 const multer = require("multer");
 const csv = require("csv-parser");
@@ -97,6 +99,237 @@ exports.createCustomer = async (req, res) => {
     }
 }
 
+exports.customerItemWiseReport = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+
+        const { fromDate, toDate, customerId } = req.query;
+
+        const match = {
+            superAdminId: hierarchy.superAdminId
+        };
+
+        if (fromDate && toDate) {
+            match.createdAt = {
+                $gte: new Date(fromDate),
+                $lte: new Date(toDate + "T23:59:59.999Z")
+            };
+        }
+
+        const pipeline = [
+            { $match: match },
+
+            { $unwind: "$items" },
+
+            {
+                $lookup: {
+                    from: "customers",
+                    localField: "customerId",
+                    foreignField: "_id",
+                    as: "customer"
+                }
+            },
+
+            {
+                $unwind: "$customer"
+            }
+        ];
+
+        if (customerId) {
+            pipeline.push({
+                $match: {
+                    "customer.customerId": Number(customerId)
+                }
+            });
+        }
+
+        pipeline.push(
+            {
+                $group: {
+                    _id: {
+                        customerNo: "$customer.customerId",
+                        customerName: "$customer.name",
+                        productId: "$items.productId",
+                        productName: "$items.name"
+                    },
+                    totalQty: { $sum: "$items.qty" },
+                    totalAmount: { $sum: "$items.finalPrice" },
+                    totalGST: { $sum: "$items.gstAmount" },
+                    totalBills: { $addToSet: "$_id" }
+                }
+            },
+            
+               {
+                $project: {
+                    _id: 0,
+                    customerId: "$_id.customerNo",
+                    customerName: "$_id.customerName",
+                    productId: "$_id.productId",
+                    productName: "$_id.productName",
+                    totalQty: 1,
+                    totalGST: { $round: ["$totalGST", 2] },
+                    totalAmount: { $round: ["$totalAmount", 2] },
+                    totalBills: { $size: "$totalBills" }
+                }
+            
+            },
+    { $sort: { customerName: 1, productName: 1 } }
+        );
+
+    const report = await Bill.aggregate(pipeline);
+
+    res.json({
+        success: true,
+        count: report.length,
+        data: report
+    });
+
+} catch (error) {
+    res.status(500).json({
+        success: false,
+        message: "Server error",
+        error: error.message
+    });
+}
+};
+
+
+exports.getCustomerBalanceTotals = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+
+        const result = await DuePayment.aggregate([
+            {
+                $match: {
+                    superAdminId: hierarchy.superAdminId,
+                    pendingAmount: { $gt: 0 }
+                }
+            },
+            {
+                $group: {
+                    _id: "$customerId",
+                    totalAmount: { $sum: "$totalAmount" },
+                    paidAmount: { $sum: "$paidAmount" },
+                    balanceAmount: { $sum: "$pendingAmount" },
+                    totalBills: { $sum: 1 }
+                }
+            },
+            {
+                $lookup: {
+                    from: "customers",
+                    localField: "_id",
+                    foreignField: "_id",
+                    as: "customer"
+                }
+            },
+            {
+                $unwind: "$customer"
+            },
+            {
+                $project: {
+                    _id: 0,
+                    customerId: "$customer.customerId",
+                    name: "$customer.name",
+                    mobile: "$customer.phone",
+
+                    balanceAmount: {
+                        $round: ["$balanceAmount", 2]
+                    },
+                    totalAmount: {
+                        $round: ["$totalAmount", 2]
+                    },
+                    paidAmount: {
+                        $round: ["$paidAmount", 2]
+                    },
+                    totalBills: 1
+                }
+            },
+            {
+                $sort: {
+                    balanceAmount: -1
+                }
+            }
+        ]);
+
+        const totalBalance = result.reduce(
+            (sum, item) => sum + Number(item.balanceAmount || 0),
+            0
+        );
+
+        res.json({
+            success: true,
+            totalCustomers: result.length,
+            totalCustomerBalance: Number(totalBalance.toFixed(2)),
+            data: result
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
+
+exports.getCustomerBalanceDetails = async (req, res) => {
+    try {
+        const { customerId } = req.params;
+
+        const hierarchy = attachHierarchy(req.user);
+
+        const customer = await Customer.findOne({
+            customerId: Number(customerId),
+            superAdminId: hierarchy.superAdminId
+        });
+
+        if (!customer) {
+            return res.status(404).json({
+                success: false,
+                message: "Customer not found"
+            });
+        }
+
+        const dues = await DuePayment.find({
+            customerId: customer._id,
+            pendingAmount: { $gt: 0 },
+            superAdminId: hierarchy.superAdminId
+        })
+            .sort({ createdAt: -1 });
+
+        const totalBalance = dues.reduce(
+            (sum, d) => sum + Number(d.pendingAmount || 0),
+            0
+        );
+
+        res.json({
+            success: true,
+            customer: {
+                customerId: customer.customerId,
+                name: customer.name,
+                mobile: customer.phone
+            },
+            totalBills: dues.length,
+            totalBalance: Number(totalBalance.toFixed(2)),
+            data: dues.map(d => ({
+                duePaymentId: d._id,
+                billNo: d.billNo,
+                billDate: d.billDate,
+                totalAmount: d.totalAmount,
+                paidAmount: d.paidAmount,
+                balanceAmount: d.pendingAmount
+            }))
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
 
 exports.getCustomers = async (req, res) => {
     try {
@@ -199,6 +432,7 @@ exports.customersSearch = async (req, res) => {
         });
     }
 }
+
 
 exports.getCustomerById = async (req, res) => {
     try {

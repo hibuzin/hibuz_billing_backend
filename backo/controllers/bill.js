@@ -5,7 +5,10 @@ const Product = require("../models/product");
 const Barcode = require("../models/barcode");
 const Customer = require("../models/customer");
 const PriceLevel = require("../models/Price_level");
+const DuePayment = require("../models/due_payment");
 const { attachHierarchy } = require("../utils/hierarchy");
+const CashRegister = require("../models/cashRegister");
+const AuditLog = require("../models/audit_log");
 
 
 const getNextInvoiceNo = async (superAdminId) => {
@@ -21,12 +24,27 @@ const getNextInvoiceNo = async (superAdminId) => {
 
 exports.createBill = async (req, res) => {
     try {
-        const { codes, customerId, redeemPoints = 0, priceLevel = "normal" } = req.body;
+        const {
+            codes,
+            items: billItems = [],
+            customerId,
+            redeemPoints = 0,
+            priceLevel = "normal",
 
-        if (!Array.isArray(codes) || codes.length === 0) {
+            paymentStatus = "paid",
+            paymentMethod = "cash",
+
+            payments = [],
+            dueDate
+        } = req.body;
+
+        if (
+            (!Array.isArray(codes) || codes.length === 0) &&
+            (!Array.isArray(billItems) || billItems.length === 0)
+        ) {
             return res.status(400).json({
                 success: false,
-                message: "No barcodes provided"
+                message: "No products provided"
             });
         }
 
@@ -38,28 +56,99 @@ exports.createBill = async (req, res) => {
         let totalGST = 0;
         const items = [];
 
-        for (const code of codes) {
-            const qty = 1;
+        const gstAuditItems = [];
 
-            const barcode = await Barcode.findOne({
-                code: String(code).trim(),
-                superAdminId: hierarchy.superAdminId
+        for (const code of codes || []) {
+            const qty = 1;
+            const searchValue = String(code).trim();
+
+            let barcode = await Barcode.findOne({
+                code: searchValue,
+                superAdminId: hierarchy.superAdminId,
+                availableQty: { $gte: qty }
             });
 
-            if (!barcode) {
+            let product = null;
+
+            if (barcode) {
+                product = await Product.findOne({
+                    _id: barcode.productId,
+                    superAdminId: hierarchy.superAdminId
+                });
+            }
+
+            if (!barcode || !product) {
                 return res.status(400).json({
                     success: false,
-                    message: `Invalid barcode: ${code}`
+                    message: `Product not found for: ${searchValue}`
+                });
+            }
+
+            let price = Number(barcode.sellingPrice || 0);
+            const gstRate = Number(barcode.gstRate || product.gstRate || 0);
+
+            const taxableAmount = price * qty;
+            const gstAmount = Number(((taxableAmount * gstRate) / 100).toFixed(2));
+            const finalPrice = Number((taxableAmount + gstAmount).toFixed(2));
+
+            subTotal += taxableAmount;
+            totalGST += gstAmount;
+
+            items.push({
+                productId: product._id,
+                barcodeId: barcode._id,
+                barcode: barcode.code,
+                productName: product.name || "",
+                name: product.name || "",
+                brand: product.brand || "",
+                flavor: barcode.flavor || "",
+                litters: barcode.litters || "",
+                qty,
+                mrp: barcode.mrp || 0,
+                price,
+                gstRate,
+                gstAmount,
+                finalPrice
+            });
+
+            if (gstRate > 0 && gstAmount > 0) {
+                gstAuditItems.push({
+                    productId: product._id,
+                    productName: product.name || "",
+                    barcode: barcode.code,
+                    qty,
+                    price,
+                    gstRate,
+                    gstAmount,
+                    finalPrice
+                });
+            }
+
+            barcode.availableQty = Math.max(Number(barcode.availableQty || 0) - qty, 0);
+            await barcode.save();
+
+            await Product.updateOne(
+                { _id: product._id, superAdminId: hierarchy.superAdminId },
+                { $inc: { stock: -qty } }
+            );
+        }
+
+
+
+        for (const billItem of billItems) {
+            const qty = Number(billItem.qty || 1);
+
+            if (isNaN(qty) || qty <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid quantity"
                 });
             }
 
             const product = await Product.findOne({
-                _id: barcode.productId,
+                _id: billItem.productId,
                 superAdminId: hierarchy.superAdminId
             });
-
-
-
 
             if (!product) {
                 return res.status(404).json({
@@ -68,11 +157,18 @@ exports.createBill = async (req, res) => {
                 });
             }
 
-            if (Number(barcode.availableQty || 0) < qty) {
+            const barcode = await Barcode.findOne({
+                productId: product._id,
+                superAdminId: hierarchy.superAdminId,
+                availableQty: { $gte: qty }
+            });
+
+            if (!barcode) {
                 return res.status(400).json({
                     success: false,
-                    message: `${product.name} out of stock`
+                    message: `${product.name} stock not available`
                 });
+
             }
 
             let price = Number(barcode.sellingPrice || 0);
@@ -140,8 +236,9 @@ exports.createBill = async (req, res) => {
             if (price <= 0) {
                 return res.status(400).json({
                     success: false,
-                    message: `Invalid selling price for barcode: ${code}`
+                    message: `Invalid selling price for product: ${product.name}`
                 });
+
             }
 
             const taxableAmount = price * qty;
@@ -153,12 +250,16 @@ exports.createBill = async (req, res) => {
             totalGST += gstAmount;
 
             items.push({
+
+
+
                 productId: product._id,
                 barcodeId: barcode._id,
                 barcode: barcode.code,
 
 
-                name: product.name,
+                productName: product.name || "",
+                name: product.name || "",
                 brand: product.brand || "",
                 flavor: barcode.flavor || "",
                 litters: barcode.litters || "",
@@ -171,10 +272,22 @@ exports.createBill = async (req, res) => {
                 finalPrice
             });
 
-            barcode.availableQty = Math.max(Number(barcode.availableQty || 0) - qty, 0);
+
+            if (gstRate > 0 && gstAmount > 0) {
+                gstAuditItems.push({
+                    productId: product._id,
+                    productName: product.name || "",
+                    barcode: barcode.code,
+                    qty,
+                    price,
+                    gstRate,
+                    gstAmount,
+                    finalPrice
+                });
+            }
+
 
             barcode.availableQty = Math.max(Number(barcode.availableQty || 0) - qty, 0);
-            await barcode.save();
 
             await barcode.save();
 
@@ -240,6 +353,87 @@ exports.createBill = async (req, res) => {
         }
 
         const grandTotal = Number((subTotal + totalGST - discount).toFixed(2));
+
+        let finalPayments = [];
+
+        if (paymentStatus === "due") {
+            finalPayments = [];
+        } else if (paymentMethod === "split") {
+            finalPayments = payments;
+        } else {
+            finalPayments = [
+                {
+                    method: paymentMethod,
+                    amount: grandTotal
+                }
+            ];
+
+        }
+
+        const allowedMethods = ["cash", "upi", "card"];
+
+        for (const pay of finalPayments) {
+            if (!allowedMethods.includes(pay.method)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid payment method"
+                });
+            }
+
+            if (Number(pay.amount || 0) <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid payment amount"
+                });
+            }
+        }
+
+        const totalPaid = Number(
+            finalPayments.reduce((sum, pay) => sum + Number(pay.amount || 0), 0).toFixed(2)
+        );
+
+        let pendingAmount = 0;
+
+        if (paymentStatus === "paid") {
+            if (totalPaid !== grandTotal) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Paid amount must equal grand total"
+                });
+            }
+        }
+
+        if (paymentStatus === "partial") {
+            if (!customer) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Customer required for partial payment"
+                });
+            }
+
+            if (totalPaid <= 0 || totalPaid >= grandTotal) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Partial paid amount must be less than grand total"
+                });
+            }
+
+            pendingAmount = Number((grandTotal - totalPaid).toFixed(2));
+        }
+
+        if (paymentStatus === "due") {
+            if (!customer) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Customer required for due payment"
+                });
+            }
+
+            finalPayments = [];
+            pendingAmount = grandTotal;
+        }
+
+
         const earnedPoints = Math.floor(grandTotal / 100);
 
         if (customer) {
@@ -247,6 +441,7 @@ exports.createBill = async (req, res) => {
             customer.totalSpent += grandTotal;
             await customer.save();
         }
+
 
         const bill = await Bill.create({
             items,
@@ -258,8 +453,10 @@ exports.createBill = async (req, res) => {
             },
             invoiceNo,
             customerId: customer ? customer._id : null,
-            paymentMethod: "cash",
-            paymentStatus: "paid",
+
+            paymentMethod: finalPayments.length > 1 ? "split" : finalPayments[0]?.method || "due",
+            paymentStatus,
+            payments: finalPayments,
 
             cashier: req.user.userId || req.user.id,
             createdBy: req.user.userId || req.user.id,
@@ -268,12 +465,82 @@ exports.createBill = async (req, res) => {
             ...hierarchy
         });
 
+        const cashRegister = await CashRegister.findOne({
+            superAdminId: hierarchy.superAdminId,
+            status: "open"
+        });
+
+        if (cashRegister && finalPayments.length > 0) {
+            for (const pay of finalPayments) {
+                const amount = Number(pay.amount || 0);
+
+                if (pay.method === "cash") {
+                    cashRegister.cashSales += amount;
+                }
+
+                if (pay.method === "upi") {
+                    cashRegister.upiSales += amount;
+                }
+
+                if (pay.method === "card") {
+                    cashRegister.cardSales += amount;
+                }
+            }
+
+            cashRegister.expectedCash =
+                cashRegister.openingAmount +
+                cashRegister.cashSales -
+                cashRegister.cashOut;
+
+            await cashRegister.save();
+        }
+
+        if (gstAuditItems.length > 0) {
+            await AuditLog.create({
+                userId: req.user.userId || req.user.id,
+                role: req.user.role,
+                module: "GST",
+                action: "CREATE",
+                documentId: bill._id,
+                oldData: null,
+                newData: {
+                    invoiceNo: bill.invoiceNo,
+                    customerId: customer ? customer._id : null,
+                    gstItems: gstAuditItems,
+                    totalGST,
+                    grandTotal
+                },
+                ...hierarchy
+            });
+        }
+
+
+        if (paymentStatus === "partial" || paymentStatus === "due") {
+            await DuePayment.create({
+                customerId: customer._id,
+                billId: bill._id,
+                totalAmount: grandTotal,
+                paidAmount: totalPaid,
+                pendingAmount,
+                paymentStatus: paymentStatus,
+                dueDate,
+                createdBy: req.user.userId || req.user.id,
+                ...hierarchy
+            });
+        }
+
+
         return res.status(201).json({
             success: true,
             message: "Bill generated successfully",
             data: {
                 billId: bill._id,
                 invoiceNo: bill.invoiceNo,
+                paymentMethod: bill.paymentMethod,
+                paymentStatus: bill.paymentStatus,
+                payments: finalPayments,
+                paidAmount: totalPaid,
+                pendingAmount,
                 items,
                 summary: bill.summary,
                 loyalty: {
@@ -293,7 +560,108 @@ exports.createBill = async (req, res) => {
             error: error.message
         });
     }
-}
+};
+
+exports.searchProductsForBill = async (req, res) => {
+    try {
+        const { search } = req.query;
+
+        if (!search) {
+            return res.status(400).json({
+                success: false,
+                message: "Search is required"
+            });
+        }
+
+        const searchValue = search.trim();
+        const hierarchy = attachHierarchy(req.user);
+
+        
+        const products = await Product.find({
+            superAdminId: hierarchy.superAdminId,
+            name: { $regex: searchValue, $options: "i" },
+            stock: { $gt: 0 }
+        }).limit(20);
+
+        const productData = await Promise.all(
+            products.map(async (p) => {
+                const barcode = await Barcode.findOne({
+                    productId: p._id,
+                    superAdminId: hierarchy.superAdminId,
+                    availableQty: { $gt: 0 }
+                });
+
+                return {
+                    productId: p._id,
+                    productName: p.name,
+                    brand: p.brand,
+                    barcode: barcode?.code || "",
+                    qty: 1,
+                    stock: p.stock,
+
+                    mrp: barcode?.mrp || 0,
+                    sellingPrice: barcode?.sellingPrice || 0,
+                    costPrice: barcode?.costPrice || 0,
+
+                    flavor: barcode?.flavor || "",
+                    litters: barcode?.litters || "",
+                    kg: barcode?.kg || "",
+
+                    gstRate: barcode?.gstRate || p.gstRate || 0
+                };
+            })
+        );
+
+
+        const barcodes = await Barcode.find({
+            superAdminId: hierarchy.superAdminId,
+            code: { $regex: searchValue, $options: "i" },
+            availableQty: { $gt: 0 }
+        }).populate("productId");
+
+        const barcodeData = barcodes
+            .filter((b) => b.productId)
+            .map((b) => ({
+                productId: b.productId._id,
+                productName: b.productId.name,
+                brand: b.productId.brand,
+                barcode: b.code,
+                qty: 1,
+                stock: b.productId.stock,
+                mrp: b.mrp || 0,
+                flavor: b.flavor || "",
+                litters: b.litters || "",
+                kg: b.kg || "",
+                gstRate: b.gstRate || b.productId.gstRate || 0
+            }));
+
+
+        const merged = [...barcodeData, ...productData];
+
+        const uniqueData = merged.filter(
+            (item, index, self) =>
+                index === self.findIndex(
+                    (x) =>
+                        String(x.productId) === String(item.productId) &&
+                        x.barcode === item.barcode
+                )
+        );
+
+        return res.status(200).json({
+            success: true,
+            count: uniqueData.length,
+            data: uniqueData
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
 
 exports.searchCustomerBills = async (req, res) => {
     try {
@@ -335,7 +703,10 @@ exports.searchCustomerBills = async (req, res) => {
 
         const bills = await Bill.find({
             superAdminId: hierarchy.superAdminId,
-            customerId: { $in: customerIds }
+            $or: [
+                { customerId: { $in: customerIds } },
+                { invoiceNo: { $regex: search, $options: "i" } }
+            ]
         })
             .populate("customerId", "name phone customerId id")
             .populate("createdBy", "name email role")
@@ -345,7 +716,17 @@ exports.searchCustomerBills = async (req, res) => {
             success: true,
             message: "Customer bills fetched successfully",
             count: bills.length,
-            data: bills
+            data: bills.map(bill => ({
+                _id: bill._id,
+                invoiceNo: bill.invoiceNo,
+                customer: bill.customerId,
+                items: bill.items,
+                summary: bill.summary,
+                paymentStatus: bill.paymentStatus,
+                paymentMethod: bill.paymentMethod,
+                createdBy: bill.createdBy,
+                createdAt: bill.createdAt
+            }))
         });
 
     } catch (error) {
@@ -359,6 +740,8 @@ exports.searchCustomerBills = async (req, res) => {
         });
     }
 };
+
+
 
 exports.getBills = async (req, res) => {
     try {

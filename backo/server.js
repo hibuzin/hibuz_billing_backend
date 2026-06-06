@@ -51,6 +51,8 @@ const locationRoutes = require("./routes/location");
 const priceLevelRoutes = require("./routes/price_level");
 const duePaymentRoutes = require("./routes/due_payment");
 const sessionRoutes = require("./routes/session");
+const expenseRoutes = require("./routes/expense");
+const cashRegisterRoutes = require("./routes/cashregister");
 
 
 
@@ -93,7 +95,8 @@ app.use("/api/locations", locationRoutes);
 app.use("/api/price-levels", priceLevelRoutes);
 app.use("/api/due-payment", duePaymentRoutes);
 app.use("/api/session", sessionRoutes);
-
+app.use("/api/expense", expenseRoutes);
+app.use("/api/cash-register", cashRegisterRoutes);
 
 
 

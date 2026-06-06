@@ -10,6 +10,7 @@ const authorize = require("../middleware/role");
 
 const {
     createBill,
+    searchProductsForBill,
     searchCustomerBills,
     getBills,
     salescheck,
@@ -23,6 +24,12 @@ router.post(
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     createBill
+);
+
+router.get("/search-product",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    searchProductsForBill
 );
 
 router.get(

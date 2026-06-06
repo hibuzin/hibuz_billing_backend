@@ -3,9 +3,12 @@ const router = express.Router();
 
 const mongoose = require("mongoose");
 const Customer = require("../models/customer");
+const Bill = require("../models/bill");
+const Barcode = require("../models/barcode");
 const HoldBill = require("../models/hold_bill");
 const Product = require("../models/Product");
 const Counter = require("../models/counter");
+const DuePayment = require("../models/due_payment");
 
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
@@ -384,6 +387,14 @@ router.put(
         try {
             const { id } = req.params;
 
+            const {
+                customerId,
+                redeemPoints = 0,
+                paymentType = "paid",
+                paidAmount = 0,
+                dueDate
+            } = req.body;
+
             if (!mongoose.Types.ObjectId.isValid(id)) {
                 return res.status(400).json({
                     success: false,
@@ -393,35 +404,244 @@ router.put(
 
             const hierarchy = attachHierarchy(req.user);
 
-            const bill = await HoldBill.findOneAndUpdate(
-                {
-                    _id: id,
-                    superAdminId: hierarchy.superAdminId,
-                    status: "hold"
-                },
-                {
-                    status: "billed"
-                },
-                {
-                    new: true
-                }
-            );
+            const holdBill = await HoldBill.findOne({
+                _id: id,
+                superAdminId: hierarchy.superAdminId,
+                status: "hold"
+            });
 
-            if (!bill) {
+            if (!holdBill) {
                 return res.status(404).json({
                     success: false,
                     message: "Hold bill not found"
                 });
             }
 
-            res.json({
+            const result = await Counter.findOneAndUpdate(
+                { name: `invoice_${hierarchy.superAdminId}` },
+                { $inc: { seq: 1 } },
+                { new: true, upsert: true }
+            );
+
+            const invoiceNo = `INV-${String(result.seq).padStart(5, "0")}`;
+
+            let subTotal = 0;
+            let totalGST = 0;
+            const items = [];
+
+            for (const item of holdBill.items) {
+                const qty = Number(item.qty || 1);
+
+                if (isNaN(qty) || qty <= 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Invalid quantity"
+                    });
+                }
+
+                const product = await Product.findOne({
+                    _id: item.productId,
+                    superAdminId: hierarchy.superAdminId
+                });
+
+                if (!product) {
+                    return res.status(404).json({
+                        success: false,
+                        message: "Product not found"
+                    });
+                }
+
+                const barcode = await Barcode.findOne({
+                    productId: product._id,
+                    superAdminId: hierarchy.superAdminId,
+                    availableQty: { $gte: qty }
+                });
+
+                if (!barcode) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `${product.name} stock not available`
+                    });
+                }
+
+                const price = Number(barcode.sellingPrice || 0);
+                const gstRate = Number(barcode.gstRate || product.gstRate || 0);
+
+                if (price <= 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Invalid selling price for product: ${product.name}`
+                    });
+                }
+
+                const taxableAmount = price * qty;
+                const gstAmount = Number(((taxableAmount * gstRate) / 100).toFixed(2));
+                const finalPrice = Number((taxableAmount + gstAmount).toFixed(2));
+
+                subTotal += taxableAmount;
+                totalGST += gstAmount;
+
+                items.push({
+                    productId: product._id,
+                    barcodeId: barcode._id,
+                    barcode: barcode.code,
+                    productName: product.name || "",
+                    name: product.name || "",
+                    brand: product.brand || "",
+                    flavor: barcode.flavor || "",
+                    litters: barcode.litters || "",
+                    qty,
+                    mrp: barcode.mrp || 0,
+                    price,
+                    gstRate,
+                    gstAmount,
+                    finalPrice
+                });
+
+                barcode.availableQty = Math.max(Number(barcode.availableQty || 0) - qty, 0);
+                await barcode.save();
+
+                const stockUpdate = await Product.updateOne(
+                    {
+                        _id: product._id,
+                        superAdminId: hierarchy.superAdminId,
+                        stock: { $gte: qty }
+                    },
+                    {
+                        $inc: { stock: -qty }
+                    }
+                );
+
+                if (stockUpdate.modifiedCount === 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `${product.name} stock update failed`
+                    });
+                }
+            }
+
+            let discount = 0;
+            let customer = null;
+
+            const finalCustomerId = customerId || holdBill.customerId;
+
+            if (finalCustomerId) {
+                customer = await Customer.findOne({
+                    customerId: finalCustomerId,
+                    superAdminId: hierarchy.superAdminId
+                });
+
+                if (!customer) {
+                    return res.status(404).json({
+                        success: false,
+                        message: "Customer not found"
+                    });
+                }
+
+                if (Number(redeemPoints) > 0) {
+                    if (Number(customer.loyaltyPoints || 0) < Number(redeemPoints)) {
+                        return res.status(400).json({
+                            success: false,
+                            message: "Not enough loyalty points"
+                        });
+                    }
+
+                    discount = Number(redeemPoints);
+                    customer.loyaltyPoints -= discount;
+                }
+            }
+
+            const grandTotal = Number((subTotal + totalGST - discount).toFixed(2));
+            const earnedPoints = Math.floor(grandTotal / 100);
+
+            if (customer) {
+                customer.loyaltyPoints = Number(customer.loyaltyPoints || 0) + earnedPoints;
+                customer.totalSpent = Number(customer.totalSpent || 0) + grandTotal;
+                await customer.save();
+            }
+
+            if ((paymentType === "partial" || paymentType === "due") && !customer) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Customer required for due payment"
+                });
+            }
+
+            const bill = await Bill.create({
+                invoiceNo,
+                items,
+                summary: {
+                    subTotal,
+                    totalGST,
+                    discount,
+                    grandTotal
+                },
+                customerId: customer ? customer._id : null,
+                paymentMethod: "cash",
+                paymentStatus:
+                    paymentType === "paid"
+                        ? "paid"
+                        : paymentType === "partial"
+                            ? "partial"
+                            : "due",
+                cashier: req.user.userId || req.user.id,
+                createdBy: req.user.userId || req.user.id,
+                role: req.user.role,
+                ...hierarchy
+            });
+
+            if (paymentType === "partial" || paymentType === "due") {
+                const paid = paymentType === "due" ? 0 : Number(paidAmount || 0);
+
+                if (paid >= grandTotal) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Paid amount must be less than grand total for due/partial"
+                    });
+                }
+
+                await DuePayment.create({
+                    customerId: customer._id,
+                    billId: bill._id,
+                    totalAmount: grandTotal,
+                    paidAmount: paid,
+                    pendingAmount: Number((grandTotal - paid).toFixed(2)),
+                    status: paymentType === "partial" ? "partial" : "due",
+                    dueDate,
+                    createdBy: req.user.userId || req.user.id,
+                    ...hierarchy
+                });
+            }
+
+            holdBill.status = "billed";
+            holdBill.billId = bill._id;
+            await holdBill.save();
+
+            return res.json({
                 success: true,
-                message: "Hold bill marked as billed",
-                data: bill
+                message: "Hold bill converted to bill successfully",
+                data: {
+                    billId: bill._id,
+                    invoiceNo: bill.invoiceNo,
+                    paymentStatus: bill.paymentStatus,
+                    paymentType,
+                    paidAmount: paymentType === "due" ? 0 : Number(paidAmount || 0),
+                    pendingAmount:
+                        paymentType === "paid"
+                            ? 0
+                            : Number((grandTotal - Number(paidAmount || 0)).toFixed(2)),
+                    items,
+                    summary: bill.summary,
+                    loyalty: {
+                        used: discount,
+                        earned: earnedPoints,
+                        remaining: customer ? customer.loyaltyPoints : 0
+                    }
+                }
             });
 
         } catch (err) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: "Server error",
                 error: err.message
@@ -429,5 +649,6 @@ router.put(
         }
     }
 );
+
 
 module.exports = router;

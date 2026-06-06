@@ -9,7 +9,9 @@ const authorize = require("../middleware/role");
 const {
     createLoyalty,
     redeemLoyalty,
-    loyaltycustomerbyid
+    resetLoyaltyPoints,
+    loyaltycustomerbyid,
+    getAllLoyaltyCustomers
 } = require("../controllers/loyalty");
 
 
@@ -28,11 +30,26 @@ router.post("/loyalty/redeem",
 );
 
 
+router.get(
+    "/loyalty/customers",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    getAllLoyaltyCustomers
+);
+
+
 router.get("/loyalty/:customerId",
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     loyaltycustomerbyid
 
+);
+
+router.put(
+    "/reset-loyalty",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    resetLoyaltyPoints
 );
 
 

@@ -61,7 +61,7 @@ exports.getAuditLogs = async (req, res) => {
             error: err.message
         });
     }
-}
+};
 
 exports.getAuditLogsByid = async (req, res) => {
     try {
@@ -91,4 +91,37 @@ exports.getAuditLogsByid = async (req, res) => {
             error: err.message
         });
     }
-}
+};
+
+
+exports.deleteAuditLog = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+
+        const { id } = req.params;
+
+        const log = await AuditLog.findOneAndDelete({
+            _id: id,
+            superAdminId: hierarchy.superAdminId
+        });
+
+        if (!log) {
+            return res.status(404).json({
+                success: false,
+                message: "Audit log not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Audit log deleted successfully"
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+};

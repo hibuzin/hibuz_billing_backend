@@ -113,6 +113,33 @@ exports.redeemLoyalty = async (req, res) => {
     }
 }
 
+
+exports.getAllLoyaltyCustomers = async (req, res) => {
+    try {
+        const { superAdminId } = req.user;
+
+        const customers = await Customer.find({
+            superAdminId
+        })
+            .select("customerId name phone loyaltyPoints totalSpent")
+            .sort({ loyaltyPoints: -1 });
+
+        res.json({
+            success: true,
+            count: customers.length,
+            data: customers
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+};
+
+
 exports.loyaltycustomerbyid = async (req, res) => {
     try {
         const { superAdminId } = req.user;
@@ -135,6 +162,44 @@ exports.loyaltycustomerbyid = async (req, res) => {
             name: customer.name,
             loyaltyPoints: customer.loyaltyPoints,
             totalSpent: customer.totalSpent
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+}
+
+
+exports.resetLoyaltyPoints = async (req, res) => {
+    try {
+        const { customerId } = req.body;
+        const { userId, superAdminId } = req.user;
+
+        const customer = await Customer.findOne({
+            customerId,
+            superAdminId
+        });
+
+        if (!customer) {
+            return res.status(404).json({
+                success: false,
+                message: "Customer not found"
+            });
+        }
+
+        customer.loyaltyPoints = 0;
+        customer.lastUpdatedBy = userId;
+
+        await customer.save();
+
+        res.json({
+            success: true,
+            message: "Loyalty points reset successfully",
+            loyaltyPoints: customer.loyaltyPoints
         });
 
     } catch (err) {

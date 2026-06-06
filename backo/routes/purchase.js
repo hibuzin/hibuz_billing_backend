@@ -7,8 +7,12 @@ const authorize = require("../middleware/role");
 
 const {
     createPurchase,
+    getSupplierBalanceBills,
+    quickSearchPurchases,
     getPurchases,
+    getAllSupplierBalances,
     getPurchaseById,
+    updateSupplierBill,
     updatePurchase,
     deleteAllPurchases,
     deletePurchase
@@ -20,6 +24,30 @@ router.post(
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     createPurchase
+);
+
+
+router.get(
+    "/search",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    quickSearchPurchases
+);
+
+
+router.get(
+    "/supplier-balances",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    getAllSupplierBalances
+);
+
+
+router.get(
+    "/supplier-balance/:supplierId",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    getSupplierBalanceBills
 );
 
 
@@ -48,8 +76,17 @@ router.put(
     verifyToken,
     authorize("super_admin", "admin"),
     updatePurchase
-       
+
 );
+
+
+router.put(
+    "/pay/:purchaseId",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    updateSupplierBill
+);
+
 
 
 router.delete(
@@ -57,7 +94,7 @@ router.delete(
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     deleteAllPurchases
-       
+
 );
 
 router.delete(

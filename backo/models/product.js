@@ -32,6 +32,12 @@ const productSchema = new mongoose.Schema({
         trim: true
     }],
 
+    kg: [
+        {
+            type: String
+        }
+    ],
+
     mrps: [{
         type: Number
     }],

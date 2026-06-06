@@ -12,7 +12,10 @@ const upload = multer({ dest: "uploads/" });
 
 const {
     createCustomer,
+    customerItemWiseReport,
+    getCustomerBalanceTotals,
     getCustomers,
+    getCustomerBalanceDetails,
     customersSearch,
     getCustomerById,
     updateCustomer,
@@ -33,12 +36,35 @@ router.post(
 
 );
 
+
+router.get(
+    "/customer-item-wise",
+    verifyToken,
+    authorize("super_admin", "admin"),
+    customerItemWiseReport
+);
+
+
+router.get(
+    "/customer-balances",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    getCustomerBalanceTotals
+);
+
 router.get(
     "/customers",
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     getCustomers
-       
+
+);
+
+router.get(
+    "/customer-balance/:customerId",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    getCustomerBalanceDetails
 );
 
 router.get(
@@ -46,7 +72,7 @@ router.get(
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     customersSearch
-        
+
 );
 
 router.get(
@@ -54,7 +80,7 @@ router.get(
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     getCustomerById
-        
+
 );
 
 router.put(
@@ -62,7 +88,7 @@ router.put(
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     updateCustomer
-        
+
 );
 
 router.delete(
@@ -70,7 +96,7 @@ router.delete(
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     deleteCustomer
-       
+
 );
 
 router.get(
@@ -78,7 +104,7 @@ router.get(
     verifyToken,
     authorize("super_admin", "admin"),
     customersExport
-       
+
 );
 
 router.post(
@@ -87,7 +113,7 @@ router.post(
     authorize("super_admin", "admin"),
     upload.single("file"),
     customersImport
-       
+
 );
 
 

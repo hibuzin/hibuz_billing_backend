@@ -9,7 +9,8 @@ const { attachHierarchy } = require("../utils/hierarchy");
 
 const{
     getAuditLogs,
-    getAuditLogsByid
+    getAuditLogsByid,
+    deleteAuditLog
 } = require("../controllers/audit_logs");
 
 router.get(
@@ -26,6 +27,13 @@ router.get(
     verifyToken,
     authorize("super_admin", "admin"),
     getAuditLogsByid
+);
+
+router.delete(
+    "/:id",
+    verifyToken,
+    authorize("super_admin"),
+    deleteAuditLog
 );
 
 module.exports = router;

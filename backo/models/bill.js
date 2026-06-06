@@ -63,18 +63,30 @@ const billSchema = new mongoose.Schema({
         default: null
     },
 
+    payments: [
+        {
+            method: {
+                type: String,
+                enum: ["cash", "upi", "card"],
+                required: true
+            },
+            amount: {
+                type: Number,
+                required: true
+            }
+        }
+    ],
     paymentMethod: {
         type: String,
-        enum: ["cash", "card", "upi"],
+        enum: ["cash", "upi", "card", "split", "due"],
         default: "cash"
     },
-
     paymentStatus: {
         type: String,
-        enum: ["paid", "pending", "cancelled"],
+        enum: ["paid", "partial", "due"],
         default: "paid"
     },
-
+    
     role: {
         type: String,
         default: ""

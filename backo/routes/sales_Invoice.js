@@ -75,7 +75,6 @@ router.post(
                     total
                 });
 
-                // decrease stock
                 await Product.updateOne(
                     {
                         _id: product._id

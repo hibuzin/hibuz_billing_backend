@@ -12,7 +12,7 @@ exports.adminCreateCashier = async (req, res) => {
             });
         }
 
-        // only admin can create cashier
+        
         if (req.user.role !== "admin") {
             return res.status(403).json({
                 success: false,

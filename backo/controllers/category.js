@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const User = require("../models/user");
 const Category = require("../models/category");
 const Hsn = require("../models/hsn");
+const AuditLog = require("../models/audit_log");
 const { attachHierarchy } = require("../utils/hierarchy");
 
 exports.createCategory = async (req, res) => {
@@ -14,6 +15,7 @@ exports.createCategory = async (req, res) => {
             cess
         } = req.body;
 
+
         if (!name) {
             return res.status(400).json({
                 success: false,
@@ -21,15 +23,42 @@ exports.createCategory = async (req, res) => {
             });
         }
 
-        if (!hsnCode || gstRate == null) {
+        if (!hsnCode) {
             return res.status(400).json({
                 success: false,
-                message: "HSN code and GST rate required"
+                message: "HSN code required"
             });
         }
-
         const hierarchy = attachHierarchy(req.user);
         const userId = req.user.userId || req.user.id;
+
+        if (
+            gstRate !== undefined &&
+            gstRate !== null &&
+            String(gstRate).toLowerCase() !== "none" &&
+            Number(gstRate) > 0
+        ) {
+
+            await AuditLog.create({
+                userId,
+                role: req.user.role,
+
+                module: "GST",
+                action: "CREATE",
+
+                documentId: category._id,
+
+                oldData: null,
+
+                newData: {
+                    categoryName: category.name,
+                    hsnCode: category.hsnCode,
+                    gstRate: category.gstRate
+                },
+
+                ...hierarchy
+            });
+        }
 
         const exists = await Category.findOne({
             name: name.trim(),
@@ -49,7 +78,23 @@ exports.createCategory = async (req, res) => {
         });
 
         if (!hsn) {
-            const gst = Number(gstRate);
+
+            let gst = 0;
+
+            if (
+                gstRate !== undefined &&
+                gstRate !== null &&
+                String(gstRate).toLowerCase() !== "none"
+            ) {
+                gst = Number(gstRate);
+
+                if (isNaN(gst)) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Invalid GST rate"
+                    });
+                }
+            }
 
             hsn = await Hsn.create({
                 hsnCode: String(hsnCode).trim(),
@@ -191,30 +236,59 @@ exports.updateCategory = async (req, res) => {
 
         if (hsnCode) {
 
+            let gst = 0;
+
+            if (
+                gstRate !== undefined &&
+                gstRate !== null &&
+                String(gstRate).toLowerCase() !== "none"
+            ) {
+                gst = Number(gstRate);
+
+                if (isNaN(gst)) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Invalid GST rate"
+                    });
+                }
+            }
+
             hsn = await Hsn.findOne({
                 hsnCode: String(hsnCode).trim(),
                 superAdminId: hierarchy.superAdminId
             });
 
-            if (!hsn) {
+            if (hsn) {
+                
+                hsn.gstRate = gst;
+                hsn.cgst = gst / 2;
+                hsn.sgst = gst / 2;
+                hsn.igst = gst;
 
-                const gst = Number(gstRate || 0);
+                if (description !== undefined) {
+                    hsn.description = description;
+                }
 
+                if (cess !== undefined) {
+                    hsn.cess = cess;
+                }
+
+                hsn.category = name || category.name;
+
+                await hsn.save();
+
+            } else {
+                
                 hsn = await Hsn.create({
                     hsnCode: String(hsnCode).trim(),
                     description,
                     gstRate: gst,
-
                     cgst: gst / 2,
                     sgst: gst / 2,
                     igst: gst,
-
                     cess: cess || 0,
-
                     category: name || category.name,
-
                     ...hierarchy,
-
                     createdBy: req.user.userId || req.user.id
                 });
             }

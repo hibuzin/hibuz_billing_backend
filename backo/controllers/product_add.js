@@ -11,7 +11,7 @@ const Hsn = require("../models/Hsn");
 exports.productcreate = async (req, res) => {
 
     try {
-        const { name, brand, categoryId, flavor, litters, mrps } = req.body;
+        const { name, brand, categoryId, flavor, litters, kg, mrps } = req.body;
 
         if (!name || !categoryId) {
             return res.status(400).json({
@@ -44,6 +44,10 @@ exports.productcreate = async (req, res) => {
             ? litters.map(x => String(x).trim()).filter(Boolean)
             : [];
 
+        const processedKg = Array.isArray(kg)
+            ? kg.map(x => String(x).trim()).filter(Boolean)
+            : [];
+
         const processedMrps = Array.isArray(mrps)
             ? mrps.map(x => Number(x)).filter(x => !isNaN(x) && x > 0)
             : [];
@@ -65,6 +69,7 @@ exports.productcreate = async (req, res) => {
 
             flavor: processedFlavors,
             litters: processedLitters,
+            kg: processedKg,
             mrps: processedMrps,
 
             categoryId,

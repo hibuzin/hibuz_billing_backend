@@ -1,34 +1,43 @@
 const express = require("express");
 const router = express.Router();
 
+const cashRegisterController = require("../controllers/cashRegister");
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 
 const {
-    createDuePayment,
-    getAllDuePayments,
-    payDuePayment
-} = require("../controllers/due_payment");
+    openCashRegister,
+    getCurrentCashRegister,
+    addCashOut,
+    closeCashRegister
+} = require("../controllers/cashRegister");
 
 router.post(
-    "/add",
+    "/open",
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
-    createDuePayment
+   openCashRegister
 );
 
 router.get(
-    "/",
+    "/current",
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
-    getAllDuePayments
+    getCurrentCashRegister
 );
 
-router.put(
-    "/:id",
+router.post(
+    "/cash-out",
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
-    payDuePayment
+    addCashOut
+);
+
+router.post(
+    "/close",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    closeCashRegister
 );
 
 module.exports = router;

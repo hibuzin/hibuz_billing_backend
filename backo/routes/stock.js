@@ -3,70 +3,36 @@ const router = express.Router();
 
 const Product = require("../models/Product");
 const Purchase = require("../models/purchase");
+const Barcode = require("../models/barcode");
+const { attachHierarchy } = require("../utils/hierarchy");
 
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
-const { attachHierarchy } = require("../utils/hierarchy");
 
+
+const {
+    allstockcheck,
+    getStockValue,
+    getproductsearchstock,
+    productStockById,
+    lowstockcheck,
+    outofstockcheck
+} = require("../controllers/stock");
+
+router.get(
+    "/",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    allstockcheck
+
+);
 
 
 router.get(
-    "/stock-check",
+    "/stock-value",
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
-    async (req, res) => {
-        try {
-            const hierarchy = attachHierarchy(req.user);
-
-            const purchases = await Purchase.find({
-                superAdminId: hierarchy.superAdminId
-            })
-                .populate("supplierId", "supplierName mobile email")
-                .populate("items.productId", "name brand stock")
-                .sort({ createdAt: -1 });
-
-            const data = [];
-
-            purchases.forEach((purchase) => {
-                purchase.items.forEach((item) => {
-                    const currentStock = Number(item.productId?.stock || 0);
-                    const purchaseQty = Number(item.qty || 0);
-
-                    data.push({
-                        productId: item.productId?._id || item.productId,
-                        productName: item.productId?.name || "",
-                        brand: item.productId?.brand || item.brand || "",
-
-                        currentStock,
-                        mrp: item.mrp,
-                        flavor: item.flavor || "",
-                        litters: item.litters || "",
-
-
-                        status:
-                            currentStock <= 0
-                                ? "Out Of Stock"
-                                : currentStock <= 10
-                                    ? "Low Stock"
-                                    : "Available"
-                    });
-                });
-            });
-
-            res.status(200).json({
-                success: true,
-                count: data.length,
-                data
-            });
-
-        } catch (err) {
-            res.status(500).json({
-                success: false,
-                message: "Server error",
-                error: err.message
-            });
-        }
-    }
+    getStockValue
 );
 
 
@@ -74,105 +40,77 @@ router.get(
     "/product-search-stock",
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
-    async (req, res) => {
-        try {
-            const hierarchy = attachHierarchy(req.user);
-            const { search } = req.query;
+    getproductsearchstock
 
-            if (!search || search.trim() === "") {
-                return res.status(400).json({
-                    success: false,
-                    message: "Search is required"
-                });
-            }
+);
 
-            const purchases = await Purchase.find({
-                superAdminId: hierarchy.superAdminId
-            })
-                .populate("items.productId", "name brand stock")
-                .sort({ createdAt: -1 });
-
-            const data = [];
-
-            purchases.forEach((purchase) => {
-                purchase.items.forEach((item) => {
-                    const productName = item.productId?.name || "";
-                    const brand = item.productId?.brand || item.brand || "";
-
-                    const matched =
-                        productName.toLowerCase().includes(search.toLowerCase()) ||
-                        brand.toLowerCase().includes(search.toLowerCase());
-
-                    if (matched) {
-                        data.push({
-                            productId: item.productId?._id || item.productId,
-                            productName,
-                            brand,
-                            mrp: item.mrp,
-                            flavor: item.flavor || "",
-                            litters: item.litters || "",
-
-                            currentStock: Number(item.productId?.stock || 0)
-                        });
-                    }
-                });
-            });
-
-            res.status(200).json({
-                success: true,
-                count: data.length,
-                data
-            });
-
-        } catch (err) {
-            res.status(500).json({
-                success: false,
-                message: "Server error",
-                error: err.message
-            });
-        }
-    }
+router.get(
+    "/stock/:productId",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    productStockById
 );
 
 router.get(
     "/low-stock",
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
+    lowstockcheck
+
+);
+
+router.get(
+    "/out-of-stock",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    outofstockcheck
+);
+
+
+router.delete(
+    "/:barcode",
+    verifyToken,
+    authorize("super_admin", "admin"),
     async (req, res) => {
         try {
             const hierarchy = attachHierarchy(req.user);
-            const limit = Number(req.query.limit || 10);
+            const { barcode } = req.params;
 
-            const products = await Product.find({
-                superAdminId: hierarchy.superAdminId,
-                stock: { $gt: 0, $lte: limit }
-            })
-                .populate("categoryId", "name")
-                .sort({ stock: 1 });
+            const stock = await Barcode.findOne({
+                code: barcode,
+                superAdminId: hierarchy.superAdminId
+            });
 
-            const data = products.map((product, index) => ({
-                sno: index + 1,
-                productId: product._id,
-                productName: product.name,
-                brand: product.brand || "",
-                category: product.categoryId?.name || "",
-                currentStock: Number(product.stock || 0),
-                mrps: product.mrps || [],
-                flavors: product.flavor || [],
-                liters: product.liters || [],
-                gstRate: Number(product.gstRate || 0),
-                status: "Low Stock"
-            }));
+            if (!stock) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Stock not found"
+                });
+            }
 
-            res.status(200).json({
+            await Product.updateOne(
+                {
+                    _id: stock.productId,
+                    superAdminId: hierarchy.superAdminId
+                },
+                {
+                    $inc: {
+                        stock: -(Number(stock.availableQty || 0))
+                    }
+                }
+            );
+
+            await Barcode.deleteOne({
+                _id: stock._id
+            });
+
+            return res.status(200).json({
                 success: true,
-                limit,
-                count: data.length,
-                data
+                message: "Stock deleted successfully"
             });
 
         } catch (err) {
-            res.status(500).json({
+            return res.status(500).json({
                 success: false,
                 message: "Server error",
                 error: err.message
@@ -180,7 +118,6 @@ router.get(
         }
     }
 );
-
 
 
 module.exports = router;
