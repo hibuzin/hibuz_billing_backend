@@ -60,7 +60,7 @@ exports.getCategories = async (req, res) => {
             superAdminId: hierarchy.superAdminId
         })
             .sort({ createdAt: -1 })
-            .populate("hsnId");
+            
 
         return res.status(200).json({
             success: true,
@@ -90,7 +90,7 @@ exports.getCategoryById = async (req, res) => {
         const category = await Category.findOne({
             _id: id,
             superAdminId: hierarchy.superAdminId
-        }).populate("hsnId");
+        });
 
         if (!category) {
             return res.status(404).json({
