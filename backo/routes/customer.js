@@ -21,7 +21,7 @@ const {
     deleteCustomer,
     customersExport,
     customersImport
-} = require("../controllers/Customer");
+} = require("../controllers/customer");
 
 
 
