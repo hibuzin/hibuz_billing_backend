@@ -10,7 +10,7 @@ const {
     getCurrentCashRegister,
     addCashOut,
     closeCashRegister
-} = require("../controllers/cashRegister");
+} = require("../controllers/cashregister");
 
 router.post(
     "/open",

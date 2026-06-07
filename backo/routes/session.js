@@ -9,7 +9,7 @@ const {
     endSession,
     todaySessions,
     sessionReport
-} = require("../controllers/Session");
+} = require("../controllers/session");
 
 router.post(
     "/start",
