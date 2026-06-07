@@ -2,7 +2,7 @@ const User = require("../models/user");
 const mongoose = require("mongoose");
 const Seperate = require("../models/Seperate");
 
-
+// checking
 exports.createSeperateAccount = async (req, res) => {
     try {
         const { name, email, phone } = req.body;
