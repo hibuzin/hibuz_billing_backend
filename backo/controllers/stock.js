@@ -1,4 +1,4 @@
-const Product = require("../models/Product");
+const Product = require("../models/product");
 const Purchase = require("../models/purchase");
 const Barcode = require("../models/barcode");
 const { attachHierarchy } = require("../utils/hierarchy");

@@ -4,7 +4,7 @@ const router = express.Router();
 const mongoose = require("mongoose");
 
 const Barcode = require("../models/barcode");
-const Product = require("../models/Product");
+const Product = require("../models/product");
 const Purchase = require("../models/purchase");
 
 const { verifyToken } = require("../middleware/auth");

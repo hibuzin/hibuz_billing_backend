@@ -6,7 +6,7 @@ const Customer = require("../models/customer");
 const Bill = require("../models/bill");
 const Barcode = require("../models/barcode");
 const HoldBill = require("../models/hold_bill");
-const Product = require("../models/Product");
+const Product = require("../models/product");
 const Counter = require("../models/counter");
 const DuePayment = require("../models/due_payment");
 

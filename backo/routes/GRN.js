@@ -3,7 +3,7 @@ const router = express.Router();
 
 const mongoose = require("mongoose");
 
-const Product = require("../models/Product");
+const Product = require("../models/product");
 const Purchase = require("../models/purchase");
 const GRN = require("../models/grn");
 

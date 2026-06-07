@@ -1,5 +1,5 @@
 const Barcode = require("../models/barcode");
-const Product = require("../models/Product");
+const Product = require("../models/product");
 const PriceLevel = require("../models/price_level");
 const { attachHierarchy } = require("../utils/hierarchy");
 const { successResponse, errorResponse } = require("../utils/response");

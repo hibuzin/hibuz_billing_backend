@@ -6,7 +6,7 @@ const authorize = require("../middleware/role");
 
 const Return = require("../models/return");
 const Purchase = require("../models/purchase");
-const Product = require("../models/Product");
+const Product = require("../models/product");
 const Supplier = require("../models/supplier");
 const { attachHierarchy } = require("../utils/hierarchy");
 
