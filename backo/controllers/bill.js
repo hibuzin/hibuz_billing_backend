@@ -7,7 +7,7 @@ const Customer = require("../models/customer");
 const PriceLevel = require("../models/price_level");
 const DuePayment = require("../models/due_payment");
 const { attachHierarchy } = require("../utils/hierarchy");
-const CashRegister = require("../models/cashRegister");
+const CashRegister = require("../models/cashregister");
 const AuditLog = require("../models/audit_log");
 
 

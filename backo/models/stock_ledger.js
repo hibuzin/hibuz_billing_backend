@@ -88,4 +88,6 @@ const stockLedgerSchema = new mongoose.Schema(
     }
 );
 
-module.exports = mongoose.model("StockLedger", stockLedgerSchema);
+module.exports =
+    mongoose.models.StockLedger ||
+    mongoose.model("StockLedger", stockLedgerSchema);

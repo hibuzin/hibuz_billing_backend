@@ -89,7 +89,6 @@ const salesInvoiceSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-module.exports = mongoose.model(
-    "SalesInvoice",
-    salesInvoiceSchema
-);
+module.exports =
+  mongoose.models.SalesInvoice ||
+  mongoose.model("SalesInvoice", salesInvoiceSchema);

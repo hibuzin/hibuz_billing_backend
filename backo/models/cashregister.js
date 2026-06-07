@@ -45,4 +45,6 @@ const cashRegisterSchema = new mongoose.Schema({
 
 }, { timestamps: true });
 
-module.exports = mongoose.model("CashRegister", cashRegisterSchema);
+module.exports =
+  mongoose.models.CashRegister ||
+  mongoose.model("CashRegister", cashRegisterSchema);

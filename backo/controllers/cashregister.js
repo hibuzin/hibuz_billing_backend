@@ -1,4 +1,4 @@
-const CashRegister = require("../models/cashRegister");
+const CashRegister = require("../models/cashregister");
 const { attachHierarchy } = require("../utils/hierarchy");
 
 exports.openCashRegister = async (req, res) => {
