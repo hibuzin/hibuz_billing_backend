@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 
+// checking
 const seperateSchema = new mongoose.Schema(
     {
         name: {
