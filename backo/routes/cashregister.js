@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const cashRegisterController = require("../controllers/cashRegister");
+const cashRegisterController = require("../controllers/cashregister");
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 
