@@ -1,6 +1,6 @@
 const user = require("../models/user");
 const mongoose = require("mongoose");
-const seperate = require("../models/Seperate");
+const seperate = require("../models/seperate");
 
 // check
 exports.createSeperateAccount = async (req, res) => {
