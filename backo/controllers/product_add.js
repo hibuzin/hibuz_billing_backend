@@ -2,10 +2,8 @@ const mongoose = require("mongoose");
 const Product = require("../models/product");
 const Barcode = require("../models/barcode");
 const { attachHierarchy } = require("../utils/hierarchy");
-
-
 const category = require("../models/category");
-const Hsn = require("../models/Hsn");
+const Hsn = require("../models/hsn");
 
 
 exports.productcreate = async (req, res) => {

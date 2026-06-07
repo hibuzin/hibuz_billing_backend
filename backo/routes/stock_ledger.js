@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const StockLedger = require("../models/stock_ledger");
-const Product = require("../models/Product");
+const Product = require("../models/product");
 
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
