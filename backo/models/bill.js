@@ -34,8 +34,8 @@ const billSchema = new mongoose.Schema({
 
     invoiceNo: {
         type: String,
-        required: true,
-        unique: true
+        unique: true,
+        sparse: true
     },
 
     summary: {
@@ -86,7 +86,7 @@ const billSchema = new mongoose.Schema({
         enum: ["paid", "partial", "due"],
         default: "paid"
     },
-    
+
     role: {
         type: String,
         default: ""

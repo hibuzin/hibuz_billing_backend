@@ -105,6 +105,7 @@ exports.productcreate = async (req, res) => {
     }
 };
 
+
 exports.getproductMrps = async (req, res) => {
     try {
         const { productId } = req.params;
@@ -160,6 +161,163 @@ exports.allProducts = async (req, res) => {
             message: "Products fetched successfully",
             count: products.length,
             data: products
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+};
+
+exports.searchProducts = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+        const { search } = req.query;
+
+        if (!search) {
+            return res.status(400).json({
+                success: false,
+                message: "Search value is required"
+            });
+        }
+
+        const products = await Product.find({
+            superAdminId: hierarchy.superAdminId,
+            isActive: { $ne: false },
+            $or: [
+                { name: { $regex: search, $options: "i" } },
+                { brand: { $regex: search, $options: "i" } },
+                { hsnCode: { $regex: search, $options: "i" } }
+            ]
+        })
+            .populate("categoryId", "name hsnCode gstRate")
+            .sort({ createdAt: -1 })
+            .limit(20);
+
+        const data = products.map((product) => ({
+            productId: product._id,
+            productName: product.name || "",
+            brand: product.brand || "",
+
+            stock: Number(product.stock || 0),
+            reservedStock: Number(product.reservedStock || 0),
+
+            categoryId: product.categoryId?._id || "",
+            categoryName: product.categoryId?.name || "",
+
+            hsnCode: product.hsnCode || product.categoryId?.hsnCode || "",
+            gstRate: Number(product.gstRate || product.categoryId?.gstRate || 0),
+
+            flavor: product.flavor || [],
+            litters: product.litters || [],
+            kg: product.kg || [],
+            mrps: product.mrps || [],
+
+            status:
+                Number(product.stock || 0) <= 0
+                    ? "Out Of Stock"
+                    : Number(product.stock || 0) <= 10
+                        ? "Low Stock"
+                        : "Available"
+        }));
+
+        return res.status(200).json({
+            success: true,
+            count: data.length,
+            data
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+};
+
+
+exports.searchProductsByCategory = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+        const { categoryId } = req.params;
+        const { search } = req.query;
+
+        const cat = await category.findOne({
+            _id: categoryId,
+            superAdminId: hierarchy.superAdminId,
+            isActive: true
+        });
+
+        if (!cat) {
+            return res.status(404).json({
+                success: false,
+                message: "Category not found"
+            });
+        }
+
+        const filter = {
+            superAdminId: hierarchy.superAdminId,
+            categoryId: cat._id,
+            isActive: { $ne: false }
+        };
+
+        if (search) {
+            const categoryName = String(cat.name || "").toLowerCase();
+            const searchValue = String(search || "").toLowerCase();
+
+            if (!categoryName.includes(searchValue)) {
+                filter.$or = [
+                    { name: { $regex: search, $options: "i" } },
+                    { brand: { $regex: search, $options: "i" } },
+                    { hsnCode: { $regex: search, $options: "i" } }
+                ];
+            }
+        }
+
+        const products = await Product.find(filter)
+            .populate("categoryId", "name hsnCode gstRate")
+            .sort({ createdAt: -1 });
+
+        const data = products.map((product) => ({
+            productId: product._id,
+            productName: product.name || "",
+            brand: product.brand || "",
+            stock: Number(product.stock || 0),
+            reservedStock: Number(product.reservedStock || 0),
+
+            categoryId: product.categoryId?._id || "",
+            categoryName: product.categoryId?.name || "",
+
+            hsnCode: product.hsnCode || product.categoryId?.hsnCode || "",
+            gstRate: Number(product.gstRate || product.categoryId?.gstRate || 0),
+
+            flavor: product.flavor || [],
+            litters: product.litters || [],
+            kg: product.kg || [],
+            mrps: product.mrps || [],
+
+            status:
+                Number(product.stock || 0) <= 0
+                    ? "Out Of Stock"
+                    : Number(product.stock || 0) <= 10
+                        ? "Low Stock"
+                        : "Available"
+        }));
+
+        return res.status(200).json({
+            success: true,
+            category: {
+                categoryId: cat._id,
+                categoryName: cat.name,
+                hsnCode: cat.hsnCode,
+                gstRate: cat.gstRate
+            },
+            count: data.length,
+            data
         });
 
     } catch (err) {

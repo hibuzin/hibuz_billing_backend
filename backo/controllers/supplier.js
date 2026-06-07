@@ -26,12 +26,14 @@ exports.addsupplier = async (req, res) => {
             supplierName,
             mobile,
             gstNumber,
+            panNumber,
             email,
             address,
             city,
             state,
             pincode,
-            contactPerson
+            contactPerson,
+            bankDetails
         } = req.body;
 
         if (!supplierName || !mobile) {
@@ -48,11 +50,22 @@ exports.addsupplier = async (req, res) => {
             supplierName,
             mobile,
             gstNumber,
+            panNumber,
             email,
             address,
             city,
             state,
             pincode,
+            contactPerson,
+
+            bankDetails: {
+                accountHolderName: bankDetails?.accountHolderName || "",
+                bankName: bankDetails?.bankName || "",
+                accountNumber: bankDetails?.accountNumber || "",
+                ifscCode: bankDetails?.ifscCode || "",
+                branchName: bankDetails?.branchName || ""
+            },
+
             superAdminId: hierarchy.superAdminId,
             adminId: hierarchy.adminId || null,
             createdBy: hierarchy.userId || hierarchy.adminId || hierarchy.superAdminId
@@ -71,7 +84,7 @@ exports.addsupplier = async (req, res) => {
             error: error.message
         });
     }
-}
+};
 
 
 exports.getSupplierTotals = async (req, res) => {

@@ -8,14 +8,14 @@ const supplierSchema = new mongoose.Schema(
             unique: true,
             required: true
         },
-        
+
         supplierName: {
             type: String,
             required: true,
             trim: true
         },
 
-        
+
         mobile: {
             type: String,
             required: true,
@@ -23,7 +23,7 @@ const supplierSchema = new mongoose.Schema(
             match: [/^[0-9]{10}$/, "Invalid mobile number"]
         },
 
-      
+
         gstNumber: {
             type: String,
             trim: true,
@@ -59,6 +59,34 @@ const supplierSchema = new mongoose.Schema(
         pincode: {
             type: String,
             default: ""
+        },
+
+        panNumber: {
+            type: String,
+            default: ""
+        },
+
+        bankDetails: {
+            accountHolderName: {
+                type: String,
+                default: ""
+            },
+            bankName: {
+                type: String,
+                default: ""
+            },
+            accountNumber: {
+                type: String,
+                default: ""
+            },
+            ifscCode: {
+                type: String,
+                default: ""
+            },
+            branchName: {
+                type: String,
+                default: ""
+            }
         },
 
         

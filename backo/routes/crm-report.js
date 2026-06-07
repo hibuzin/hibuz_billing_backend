@@ -7,7 +7,7 @@ const authorize = require("../middleware/role");
 
 const {
     getCRMReport
-}
+} = require("../controllers/crm_report");
 
 
 

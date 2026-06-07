@@ -25,6 +25,7 @@ const productaddRoutes = require("./routes/product_add")
 const scanRoutes = require("./routes/scan");
 const billRoutes = require("./routes/bill");
 const customerRoutes = require("./routes/customer");
+const crmReportRoutes = require("./routes/crm-report");
 const purchaseRoutes = require("./routes/purchase");
 const supplierRoutes = require("./routes/supplier");
 const categoryRoutes = require("./routes/category");
@@ -57,7 +58,6 @@ const cashRegisterRoutes = require("./routes/cashregister");
 
 
 
-
 app.use("/api/auth", authRoutes);
 app.use("/api/super-admin", superAdminControlRoutes);
 app.use("/api/admin", AdminUserRoutes);
@@ -70,6 +70,7 @@ app.use("/api/supplier", supplierRoutes);
 app.use("/api/scan", scanRoutes);
 app.use("/api/bill", billRoutes);
 app.use("/api/customer", customerRoutes);
+app.use("/api/crm-report", crmReportRoutes);
 app.use("/api/purchase", purchaseRoutes);
 app.use("/api/category", categoryRoutes);
 app.use("/api/loyalty", loyaltyRoutes);
@@ -104,7 +105,7 @@ app.get("/", (req, res) => {
   res.send("Backend is running ");
 });
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/supermarket';
+const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://posbilling:pass1234@cluster0.lemfxvu.mongodb.net/supermarket';
 
 mongoose.connect(MONGO_URI)
   .then(() => console.log('mongoDB Connected'))

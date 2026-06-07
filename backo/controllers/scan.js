@@ -23,18 +23,17 @@ exports.scanProduct = async (req, res) => {
         const barcode = await Barcode.findOne({
             code,
             superAdminId: hierarchy.superAdminId,
-
+            availableQty: { $gt: 0 }
         }).populate("productId");
 
-
+        if (!barcode) {
+            return res.status(404).json({
+                success: false,
+                message: "Barcode not found or stock not available"
+            });
+        }
 
         const product = barcode.productId;
-
-        const priceLevel = await PriceLevel.findOne({
-            productId: product._id,
-            superAdminId: hierarchy.superAdminId,
-            isActive: true
-        });
 
         if (!product) {
             return res.status(404).json({
@@ -43,30 +42,39 @@ exports.scanProduct = async (req, res) => {
             });
         }
 
+        const priceLevel = await PriceLevel.findOne({
+            productId: product._id,
+            superAdminId: hierarchy.superAdminId,
+            isActive: true
+        });
+
         return res.json({
             success: true,
             message: "Product scanned successfully",
             data: {
                 barcode: barcode.code,
+                barcodeId: barcode._id,
 
                 productId: product._id,
                 productName: product.name,
                 brand: product.brand || "",
 
-                qty: barcode.qty || 1,
-                availableQty: barcode.availableQty || 1,
+                qty: 1,
+                availableQty: barcode.availableQty || 0,
 
                 hsnCode: product.hsnCode || "",
-                gstRate: product.gstRate || 0,
+                gstRate: barcode.gstRate || product.gstRate || 0,
 
                 flavor: barcode.flavor || "",
                 litters: barcode.litters || "",
+                kg: barcode.kg || "",
 
-                mrp: barcode.mrp || product.mrp || 0,
-                sellingPrice: barcode.sellingPrice || product.sellingPrice || 0,
+                mrp: barcode.mrp || 0,
+                sellingPrice: barcode.sellingPrice || 0,
+                costPrice: barcode.costPrice || 0,
+
                 priceLevel: priceLevel || null,
-
-                isSold: barcode.isSold
+                isSold: barcode.isSold || false
             }
         });
 
@@ -77,4 +85,4 @@ exports.scanProduct = async (req, res) => {
             error: error.message
         });
     }
-}
+};

@@ -15,6 +15,8 @@ const {
     productcreate,
     getproductMrps,
     allProducts,
+    searchProducts,
+    searchProductsByCategory,
     ProductsById,
     updateProduct,
     deleteAllProducts,
@@ -46,6 +48,22 @@ router.get(
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     allProducts,
+);
+
+
+router.get(
+    "/search",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    searchProducts
+);
+
+
+router.get(
+    "/category/:categoryId",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    searchProductsByCategory
 );
 
 
