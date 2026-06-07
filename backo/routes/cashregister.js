@@ -16,7 +16,7 @@ router.post(
     "/open",
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
-   openCashRegister
+    openCashRegister
 );
 
 router.get(

@@ -126,11 +126,11 @@ exports.createPurchase = async (req, res) => {
             const gst = round2((qty * costPrice * gstpercentage) / 100);
 
 
-            const productMrps = Array.isArray(product.mrps) ? product.mrps : [];
+            const productMrp = Number(product.mrp || 0);
             const productFlavors = Array.isArray(product.flavor) ? product.flavor : [];
             const productLitters = Array.isArray(product.litters) ? product.litters : [];
 
-            if (!productMrps.includes(mrp)) {
+            if (mrp !== productMrp) {
                 return res.status(400).json({
                     success: false,
                     message: "Selected MRP not found in product"

@@ -3,13 +3,27 @@ const Product = require("../models/product");
 const Barcode = require("../models/barcode");
 const { attachHierarchy } = require("../utils/hierarchy");
 const category = require("../models/category");
+
 const Hsn = require("../models/hsn");
 
 
 exports.productcreate = async (req, res) => {
 
     try {
-        const { name, brand, categoryId, flavor, litters, kg, mrps } = req.body;
+        const {
+            name,
+            brand,
+            categoryId,
+            hsnCode,
+            gstRate,
+            flavor,
+            litters,
+            kg,
+            mrp,
+            costPrice,
+            sellingPrice,
+            barcode
+        } = req.body;
 
         if (!name || !categoryId) {
             return res.status(400).json({
@@ -32,7 +46,21 @@ exports.productcreate = async (req, res) => {
             });
         }
 
+        if (!hsnCode) {
+            return res.status(400).json({
+                success: false,
+                message: "HSN code is required"
+            });
+        }
 
+        const processedGstRate = Number(gstRate || 0);
+
+        if (isNaN(processedGstRate) || processedGstRate < 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid GST rate is required"
+            });
+        }
 
         const processedFlavors = Array.isArray(flavor)
             ? flavor.map(x => String(x).trim()).filter(Boolean)
@@ -46,14 +74,43 @@ exports.productcreate = async (req, res) => {
             ? kg.map(x => String(x).trim()).filter(Boolean)
             : [];
 
-        const processedMrps = Array.isArray(mrps)
-            ? mrps.map(x => Number(x)).filter(x => !isNaN(x) && x > 0)
-            : [];
+        const processedMrp = Number(mrp);
 
-        if (processedMrps.length === 0) {
+        if (isNaN(processedMrp) || processedMrp <= 0) {
             return res.status(400).json({
                 success: false,
-                message: "At least one valid MRP is required"
+                message: "Valid MRP is required"
+            });
+        }
+
+        const processedCostPrice = Number(costPrice);
+        const processedSellingPrice = Number(sellingPrice);
+
+        if (isNaN(processedCostPrice) || processedCostPrice < 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid cost price is required"
+            });
+        }
+
+        if (isNaN(processedSellingPrice) || processedSellingPrice < 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid selling price is required"
+            });
+        }
+
+        if (processedCostPrice > processedMrp) {
+            return res.status(400).json({
+                success: false,
+                message: "Cost price cannot be greater than MRP"
+            });
+        }
+
+        if (processedSellingPrice > processedMrp) {
+            return res.status(400).json({
+                success: false,
+                message: "Selling price cannot be greater than MRP"
             });
         }
 
@@ -68,24 +125,70 @@ exports.productcreate = async (req, res) => {
             flavor: processedFlavors,
             litters: processedLitters,
             kg: processedKg,
-            mrps: processedMrps,
+            mrp: processedMrp,
+
+            costPrice: processedCostPrice,
+            sellingPrice: processedSellingPrice,
 
             categoryId,
+            categoryName: cat.name || "",
 
 
-            hsnId: cat.hsnId || null,
-            hsnCode: cat.hsnCode || "",
-            gstRate: cat.gstRate || 0,
+            hsnCode: String(hsnCode).trim(),
+            gstRate: processedGstRate,
 
             ...hierarchy,
             createdBy: req.user.userId
         });
 
+        let createdBarcode = null;
+
+        if (barcode) {
+            const barcodeCode = String(barcode).trim();
+
+            const existingBarcode = await Barcode.findOne({
+                code: barcodeCode,
+                superAdminId: hierarchy.superAdminId
+            });
+
+            if (existingBarcode) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Barcode already exists"
+                });
+            }
+
+            createdBarcode = await Barcode.create({
+                productId: product._id,
+                code: barcodeCode,
+
+                qty: 0,
+                availableQty: 0,
+
+                mrp: processedMrp,
+                costPrice: processedCostPrice,
+                sellingPrice: processedSellingPrice,
+                gstRate: processedGstRate,
+
+                flavor: processedFlavors[0] || "",
+                litters: processedLitters[0] || "",
+
+                isSold: false,
+
+                ...hierarchy,
+                createdBy: req.user.userId
+            });
+        }
+
         res.status(201).json({
             success: true,
             message: "Product created successfully",
-            data: product
+            data: {
+                product,
+                barcode: createdBarcode
+            }
         });
+
 
     } catch (err) {
         if (err.code === 11000) {
@@ -367,10 +470,22 @@ exports.ProductsById = async (req, res) => {
 
 
 exports.updateProduct = async (req, res) => {
-
     try {
         const { id } = req.params;
-        const { name, brand, categoryId, flavor, litters, mrps } = req.body;
+
+        const {
+            name,
+            brand,
+            categoryId,
+            hsnCode,
+            gstRate,
+            flavor,
+            litters,
+            kg,
+            mrp,
+            costPrice,
+            sellingPrice
+        } = req.body;
 
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({
@@ -407,46 +522,114 @@ exports.updateProduct = async (req, res) => {
             }
 
             product.categoryId = categoryId;
-            product.hsnId = cat.hsnId || null;
-            product.hsnCode = cat.hsnCode || "";
-            product.gstRate = cat.gstRate || 0;
+            product.categoryName = cat.name || "";
         }
 
         if (name) product.name = String(name).trim();
         if (brand !== undefined) product.brand = String(brand).trim();
 
-        if (Array.isArray(flavor)) {
-            product.flavor = flavor
-                .map(x => String(x).trim())
-                .filter(Boolean);
-        }
-
-        if (Array.isArray(litters)) {
-            product.litters = litters
-                .map(x => String(x).trim())
-                .filter(Boolean);
-        }
-
-        if (Array.isArray(mrps)) {
-            const processedMrps = mrps
-                .map(x => Number(x))
-                .filter(x => !isNaN(x) && x > 0);
-
-            if (processedMrps.length === 0) {
+        if (hsnCode !== undefined) {
+            if (!hsnCode) {
                 return res.status(400).json({
                     success: false,
-                    message: "At least one valid MRP is required"
+                    message: "HSN code is required"
                 });
             }
 
-            product.mrps = processedMrps;
+            product.hsnCode = String(hsnCode).trim();
+        }
+
+        if (gstRate !== undefined) {
+            const processedGstRate = Number(gstRate);
+
+            if (isNaN(processedGstRate) || processedGstRate < 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid GST rate is required"
+                });
+            }
+
+            product.gstRate = processedGstRate;
+        }
+
+        if (Array.isArray(flavor)) {
+            product.flavor = flavor.map(x => String(x).trim()).filter(Boolean);
+        }
+
+        if (Array.isArray(litters)) {
+            product.litters = litters.map(x => String(x).trim()).filter(Boolean);
+        }
+
+        if (Array.isArray(kg)) {
+            product.kg = kg.map(x => String(x).trim()).filter(Boolean);
+        }
+
+        if (mrp !== undefined) {
+            const processedMrp = Number(mrp);
+
+            if (isNaN(processedMrp) || processedMrp <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid MRP is required"
+                });
+            }
+
+            product.mrp = processedMrp;
+        }
+
+        if (costPrice !== undefined) {
+            const processedCostPrice = Number(costPrice);
+
+            if (isNaN(processedCostPrice) || processedCostPrice < 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid cost price is required"
+                });
+            }
+
+            product.costPrice = processedCostPrice;
+        }
+
+        if (sellingPrice !== undefined) {
+            const processedSellingPrice = Number(sellingPrice);
+
+            if (isNaN(processedSellingPrice) || processedSellingPrice < 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid selling price is required"
+                });
+            }
+
+            product.sellingPrice = processedSellingPrice;
+        }
+
+        if (
+            product.mrp &&
+            product.costPrice !== undefined &&
+            product.costPrice > product.mrp
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Cost price cannot be greater than MRP"
+            });
+        }
+
+        if (
+            product.mrp &&
+            product.sellingPrice !== undefined &&
+            product.sellingPrice > product.mrp
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Selling price cannot be greater than MRP"
+            });
         }
 
         product.updatedBy = req.user.userId || req.user.id;
 
         await product.save();
 
-        res.json({
+        return res.json({
             success: true,
             message: "Product updated successfully",
             data: product
@@ -460,7 +643,7 @@ exports.updateProduct = async (req, res) => {
             });
         }
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message: "Server error",
             error: err.message

@@ -38,14 +38,39 @@ const productSchema = new mongoose.Schema({
         }
     ],
 
-    mrps: [{
+    mrp: {
         type: Number
-    }],
+    },
+
+    costPrice: {
+        type: Number,
+        default: 0
+    },
+
+    sellingPrice: {
+        type: Number,
+        default: 0
+    },
+
+    hsnCode: {
+        type: String,
+        default: ""
+    },
+
+    gstRate: {
+        type: Number,
+        default: 0
+    },
 
     categoryId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Category",
         required: true
+    },
+
+    categoryName: {
+        type: String,
+        default: ""
     },
 
     hsnId: {
