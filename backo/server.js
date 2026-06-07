@@ -102,18 +102,34 @@ app.use("/api/cash-register", cashRegisterRoutes);
 
 
 app.get("/", (req, res) => {
-  res.send("Backend is running ");
+  res.send("Backend is running");
 });
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://posbilling:pass1234@cluster0.lemfxvu.mongodb.net/supermarket';
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Server healthy"
+  });
+});
+
+const MONGO_URI = process.env.MONGO_URI;
+
+if (!MONGO_URI) {
+  console.error("MONGO_URI is missing");
+  process.exit(1);
+}
 
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('mongoDB Connected'))
-  .catch(err => console.error('mongoDB connection error:', err));
+  .then(() => {
+    console.log("MongoDB Connected");
 
+    const PORT = process.env.PORT || 5000;
 
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  })
+  .catch(err => {
+    console.error("MongoDB connection error:", err);
+    process.exit(1);
+  });
