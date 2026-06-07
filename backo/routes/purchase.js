@@ -16,7 +16,7 @@ const {
     updatePurchase,
     deleteAllPurchases,
     deletePurchase
-} = require("../controllers/Purchase");
+} = require("../controllers/purchase");
 
 
 router.post(
