@@ -12,7 +12,6 @@ const upload = multer({ dest: "uploads/" });
 
 const {
     createCustomer,
-    customerItemWiseReport,
     getCustomerBalanceTotals,
     getCustomers,
     getCustomerBalanceDetails,
@@ -36,13 +35,6 @@ router.post(
 
 );
 
-
-router.get(
-    "/customer-item-wise",
-    verifyToken,
-    authorize("super_admin", "admin"),
-    customerItemWiseReport
-);
 
 
 router.get(

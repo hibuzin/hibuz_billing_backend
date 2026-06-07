@@ -118,3 +118,98 @@ exports.getCRMReport = async (req, res) => {
         });
     }
 }
+
+
+exports.customerItemWiseReport = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+
+        const { fromDate, toDate, customerId } = req.query;
+
+        const match = {
+            superAdminId: hierarchy.superAdminId
+        };
+
+        if (fromDate && toDate) {
+            match.createdAt = {
+                $gte: new Date(fromDate),
+                $lte: new Date(toDate + "T23:59:59.999Z")
+            };
+        }
+
+        const pipeline = [
+            { $match: match },
+
+            { $unwind: "$items" },
+
+            {
+                $lookup: {
+                    from: "customers",
+                    localField: "customerId",
+                    foreignField: "_id",
+                    as: "customer"
+                }
+            },
+
+            {
+                $unwind: "$customer"
+            }
+        ];
+
+        if (customerId) {
+            pipeline.push({
+                $match: {
+                    "customer.customerId": Number(customerId)
+                }
+            });
+        }
+
+        pipeline.push(
+            {
+                $group: {
+                    _id: {
+                        customerNo: "$customer.customerId",
+                        customerName: "$customer.name",
+                        productId: "$items.productId",
+                        productName: "$items.name"
+                    },
+                    totalQty: { $sum: "$items.qty" },
+                    totalAmount: { $sum: "$items.finalPrice" },
+                    totalGST: { $sum: "$items.gstAmount" },
+                    totalBills: { $addToSet: "$_id" }
+                }
+            },
+
+            {
+                $project: {
+                    _id: 0,
+                    customerId: "$_id.customerNo",
+                    customerName: "$_id.customerName",
+                    productId: "$_id.productId",
+                    productName: "$_id.productName",
+                    totalQty: 1,
+                    totalGST: { $round: ["$totalGST", 2] },
+                    totalAmount: { $round: ["$totalAmount", 2] },
+                    totalBills: { $size: "$totalBills" }
+                }
+
+            },
+            { $sort: { customerName: 1, productName: 1 } }
+        );
+
+        const report = await Bill.aggregate(pipeline);
+
+        res.json({
+            success: true,
+            count: report.length,
+            data: report
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
