@@ -1,6 +1,6 @@
-const User = require("../models/user");
+const user = require("../models/user");
 const mongoose = require("mongoose");
-const Seperate = require("../models/Seperate");
+const seperate = require("../models/Seperate");
 
 // checking
 exports.createSeperateAccount = async (req, res) => {
@@ -15,7 +15,7 @@ exports.createSeperateAccount = async (req, res) => {
             });
         }
 
-        const superAdmin = await User.findOne({
+        const superAdmin = await user.findOne({
             _id: userId,
             role: "super_admin"
         }).select("+password");
@@ -27,7 +27,7 @@ exports.createSeperateAccount = async (req, res) => {
             });
         }
 
-        const alreadyCreated = await Seperate.findOne({
+        const alreadyCreated = await seperate.findOne({
             createdBy: userId
         });
 
@@ -40,7 +40,7 @@ exports.createSeperateAccount = async (req, res) => {
 
 
 
-        const seperate = await Seperate.create({
+        const seperate = await seperate.create({
             name: name.trim(),
             email: email.trim().toLowerCase(),
             phone: phone.trim(),
@@ -72,7 +72,7 @@ exports.createSeperateAccount = async (req, res) => {
 exports.getSeperateAccount = async (req, res) => {
     try {
 
-        const seperate = await Seperate.findOne({
+        const seperate = await seperate.findOne({
             createdBy: req.user.userId || req.user.id
         });
 
@@ -103,7 +103,7 @@ exports.getSuperAdminMe = async (req, res) => {
     try {
         const userId = req.user.userId || req.user.id;
 
-        const superAdmin = await User.findOne({
+        const superAdmin = await user.findOne({
             _id: userId,
             role: "super_admin"
         }).select(
@@ -149,7 +149,7 @@ exports.updateSuperAdminMe = async (req, res) => {
             gstnumber
         } = req.body;
 
-        const superAdmin = await User.findOne({
+        const superAdmin = await user.findOne({
             _id: userId,
             role: "super_admin"
         });
@@ -163,7 +163,7 @@ exports.updateSuperAdminMe = async (req, res) => {
 
         if (CompanyEmail) {
 
-            const existingEmail = await User.findOne({
+            const existingEmail = await user.findOne({
                 CompanyEmail: CompanyEmail.trim().toLowerCase(),
                 _id: { $ne: userId }
             });
