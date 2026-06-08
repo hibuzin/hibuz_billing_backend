@@ -7,6 +7,7 @@ const authorize = require("../middleware/role");
 
 const {
     createPurchase,
+    getProductForPurchase,
     getSupplierBalanceBills,
     quickSearchPurchases,
     getPurchases,
@@ -24,6 +25,13 @@ router.post(
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     createPurchase
+);
+
+router.get(
+    "/:productId",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+   getProductForPurchase
 );
 
 

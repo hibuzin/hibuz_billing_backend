@@ -255,7 +255,8 @@ exports.allProducts = async (req, res) => {
             superAdminId: hierarchy.superAdminId
         })
             .populate("categoryId", "name")
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .lean();
 
         return res.status(200).json({
             success: true,

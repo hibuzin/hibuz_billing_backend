@@ -18,7 +18,12 @@ exports.allstockcheck = async (req, res) => {
 
         purchases.forEach((purchase) => {
             purchase.items.forEach((item) => {
+
                 const currentStock = Number(item.productId?.stock || 0);
+                const purchasedQty = Number(item.qty || 0);
+                const receivedQty = Number(item.receivedQty || 0);
+                const pendingQty = Number(item.pendingQty || 0);
+                const soldQty = Math.max(receivedQty - currentStock, 0);
 
                 data.push({
                     purchaseId: purchase._id,
@@ -39,9 +44,10 @@ exports.allstockcheck = async (req, res) => {
                     litters: item.litters || "",
                     kg: item.kg || "",
 
-                    purchasedQty: item.qty || 0,
-                    receivedQty: item.receivedQty || 0,
-                    pendingQty: item.pendingQty || 0,
+                    purchasedQty,
+                    receivedQty,
+                    pendingQty,
+                    soldQty,
 
                     status:
                         currentStock <= 0
@@ -67,9 +73,6 @@ exports.allstockcheck = async (req, res) => {
         });
     }
 }
-
-
-
 
 exports.getStockValue = async (req, res) => {
     try {

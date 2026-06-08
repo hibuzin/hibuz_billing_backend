@@ -256,8 +256,8 @@ exports.createPurchase = async (req, res) => {
                 priceLevel,
                 barcode,
 
-                receivedQty: 0,
-                pendingQty: qty
+                receivedQty: qty,
+                pendingQty: 0
             });
         }
 
@@ -399,6 +399,62 @@ exports.createPurchase = async (req, res) => {
         });
     }
 };
+
+
+exports.getProductForPurchase = async (req, res) => {
+    try {
+        const { productId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(productId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid product id"
+            });
+        }
+
+        const hierarchy = attachHierarchy(req.user);
+
+        const product = await Product.findOne({
+            _id: productId,
+            superAdminId: hierarchy.superAdminId
+        });
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: "Product not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                productId: product._id,
+                productName: product.name,
+                brand: product.brand,
+                categoryId: product.categoryId,
+                categoryName: product.categoryName,
+                hsnCode: product.hsnCode,
+                gstRate: product.gstRate,
+                mrp: product.mrp,
+                costPrice: product.costPrice,
+                sellingPrice: product.sellingPrice,
+                flavor: product.flavor,
+                litters: product.litters,
+                kg: product.kg,
+                currentStock: product.stock
+            }
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+};
+
 
 exports.getAllSupplierBalances = async (req, res) => {
     try {

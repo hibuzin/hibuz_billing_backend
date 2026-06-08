@@ -79,16 +79,6 @@ const productSchema = new mongoose.Schema({
         default: null
     },
 
-    hsnCode: {
-        type: String,
-        default: ""
-    },
-
-    gstRate: {
-        type: Number,
-        default: 0
-    },
-
     superAdminId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
