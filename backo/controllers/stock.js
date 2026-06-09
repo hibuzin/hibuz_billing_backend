@@ -1,6 +1,7 @@
 const Product = require("../models/product");
 const Purchase = require("../models/purchase");
 const Barcode = require("../models/barcode");
+const Bill = require("../models/bill");
 const { attachHierarchy } = require("../utils/hierarchy");
 
 
@@ -337,6 +338,94 @@ exports.productStockById = async (req, res) => {
             success: false,
             message: "Server error",
             error: err.message
+        });
+    }
+};
+
+exports.getTopSellingProducts = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+        const limit = Number(req.query.limit || 10);
+
+        const result = await Bill.aggregate([
+            {
+                $match: {
+                    superAdminId: hierarchy.superAdminId
+                }
+            },
+            { $unwind: "$items" },
+            {
+                $group: {
+                    _id: "$items.productId",
+                    productNameFromBill: { $first: "$items.productName" },
+                    nameFromBill: { $first: "$items.name" },
+                    brand: { $first: "$items.brand" },
+                    barcode: { $first: "$items.barcode" },
+                    totalQtySold: { $sum: "$items.qty" },
+                    totalSalesAmount: { $sum: "$items.finalPrice" },
+                    totalGST: { $sum: "$items.gstAmount" }
+                }
+            },
+            {
+                $lookup: {
+                    from: "products",
+                    localField: "_id",
+                    foreignField: "_id",
+                    as: "product"
+                }
+            },
+            {
+                $unwind: {
+                    path: "$product",
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $sort: {
+                    totalQtySold: -1
+                }
+            },
+            {
+                $limit: limit
+            },
+            {
+                $project: {
+                    _id: 0,
+                    productId: "$_id",
+                    productName: {
+                        $ifNull: [
+                            "$productNameFromBill",
+                            {
+                                $ifNull: [
+                                    "$nameFromBill",
+                                    "$product.name"
+                                ]
+                            }
+                        ]
+                    },
+                    brand: {
+                        $ifNull: ["$brand", "$product.brand"]
+                    },
+                    barcode: 1,
+                    totalQtySold: 1,
+                    totalSalesAmount: { $round: ["$totalSalesAmount", 2] },
+                    totalGST: { $round: ["$totalGST", 2] }
+                }
+            }
+        ]);
+
+        return res.status(200).json({
+            success: true,
+            message: "Top selling products fetched successfully",
+            data: result
+        });
+
+    } catch (error) {
+        console.error("TOP SELLING ERROR:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message
         });
     }
 };

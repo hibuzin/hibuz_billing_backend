@@ -1,11 +1,6 @@
 const express = require("express");
 const router = express.Router();
 
-const Product = require("../models/product");
-const Purchase = require("../models/purchase");
-const Barcode = require("../models/barcode");
-const { attachHierarchy } = require("../utils/hierarchy");
-
 const { verifyToken } = require("../middleware/auth");
 const authorize = require("../middleware/role");
 
@@ -14,6 +9,7 @@ const {
     allstockcheck,
     getStockValue,
     getproductsearchstock,
+    getTopSellingProducts,
     productStockById,
     lowstockcheck,
     outofstockcheck
@@ -49,6 +45,14 @@ router.get(
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     productStockById
+);
+
+
+router.get(
+    "/top-selling-products",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+   getTopSellingProducts
 );
 
 router.get(
