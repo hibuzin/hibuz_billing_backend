@@ -32,7 +32,6 @@ exports.addsupplier = async (req, res) => {
             city,
             state,
             pincode,
-            contactPerson,
             bankDetails
         } = req.body;
 
@@ -56,7 +55,6 @@ exports.addsupplier = async (req, res) => {
             city,
             state,
             pincode,
-            contactPerson,
 
             bankDetails: {
                 accountHolderName: bankDetails?.accountHolderName || "",

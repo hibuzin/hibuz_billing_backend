@@ -6,6 +6,74 @@ const { successResponse, errorResponse } = require("../utils/response");
 
 
 
+exports.scanProductForPurchase = async (req, res) => {
+    try {
+        const code = String(req.params.code || "").trim();
+
+        if (!code) {
+            return res.status(400).json({
+                success: false,
+                message: "Barcode is required"
+            });
+        }
+
+        const hierarchy = attachHierarchy(req.user);
+
+        const barcode = await Barcode.findOne({
+            code,
+            superAdminId: hierarchy.superAdminId
+        }).populate("productId");
+
+        if (!barcode) {
+            return res.status(404).json({
+                success: false,
+                message: "Barcode not found. Please create product first"
+            });
+        }
+
+        const product = barcode.productId;
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: "Product not found"
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "Product scanned for purchase",
+            data: {
+                productId: product._id,
+                productName: product.name,
+                brand: product.brand || "",
+
+                barcode: barcode.code,
+
+                hsnCode: product.hsnCode || "",
+                gstRate: barcode.gstRate || product.gstRate || 0,
+
+                flavor: barcode.flavor || "",
+                litters: barcode.litters || "",
+                kg: barcode.kg || "",
+
+                mrp: barcode.mrp || product.mrp || 0,
+                costPrice: barcode.costPrice || product.costPrice || 0,
+                sellingPrice: barcode.sellingPrice || product.sellingPrice || 0,
+
+                
+            }
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+};
+
 
 exports.scanProduct = async (req, res) => {
     try {

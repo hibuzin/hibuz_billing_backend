@@ -8,15 +8,23 @@ const authorize = require("../middleware/role");
 
 
 const {
-     scanProduct 
-    } = require("../controllers/scan");
+    scanProduct,
+    scanProductForPurchase
+} = require("../controllers/scan");
 
 router.get(
     "/:code",
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     scanProduct
-       
+
+);
+
+router.get(
+    "/scan/:code",
+    verifyToken,
+    authorize("super_admin", "admin"),
+    scanProductForPurchase
 );
 
 
