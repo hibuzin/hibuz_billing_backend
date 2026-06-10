@@ -251,12 +251,28 @@ exports.allProducts = async (req, res) => {
     try {
         const hierarchy = attachHierarchy(req.user);
 
-        const products = await Product.find({
+        let products = await Product.find({
             superAdminId: hierarchy.superAdminId
         })
             .populate("categoryId", "name")
             .sort({ createdAt: -1 })
             .lean();
+
+        products = await Promise.all(
+            products.map(async (product) => {
+                const barcode = await Barcode.findOne({
+                    productId: product._id,
+                    superAdminId: hierarchy.superAdminId
+                }).lean();
+
+                return {
+                    ...product,
+                    barcode: barcode?.code || "",
+                    barcodeId: barcode?._id || "",
+                    availableQty: barcode?.availableQty || 0
+                };
+            })
+        );
 
         return res.status(200).json({
             success: true,
