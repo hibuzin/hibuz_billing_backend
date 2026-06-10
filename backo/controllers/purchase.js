@@ -238,6 +238,10 @@ exports.createPurchase = async (req, res) => {
                 productId: product._id,
                 productName: product.name || "",
 
+                description: item.description
+                    ? String(item.description).trim()
+                    : product.description || "",
+
                 hsnId: product.hsnId || null,
                 hsnCode: product.hsnCode || "",
                 gstpercentage,
@@ -337,6 +341,9 @@ exports.createPurchase = async (req, res) => {
                     productId: item.productId?._id,
 
                     productName: item.productId?.name || "",
+
+                    description:
+                        item.description || "",
 
                     brand:
                         item.productId?.brand ||
@@ -699,9 +706,7 @@ exports.getPurchases = async (req, res) => {
 
 exports.getPurchaseById = async (req, res) => {
     try {
-
         const hierarchy = attachHierarchy(req.user);
-
         const { id } = req.params;
 
         if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -716,7 +721,7 @@ exports.getPurchaseById = async (req, res) => {
             superAdminId: hierarchy.superAdminId
         })
             .populate("supplierId", "supplierName mobile email")
-            .populate("items.productId", "name brand");
+            .populate("items.productId", "name brand description");
 
         if (!purchase) {
             return res.status(404).json({
@@ -727,9 +732,9 @@ exports.getPurchaseById = async (req, res) => {
 
         return res.status(200).json({
             success: true,
+            message: "Purchase fetched successfully",
             data: {
                 _id: purchase._id,
-                productName: purchase.items[0]?.productId?.name || "",
 
                 supplier: {
                     id: purchase.supplierId?._id || "",
@@ -742,60 +747,54 @@ exports.getPurchaseById = async (req, res) => {
                 invoiceDate: purchase.invoiceDate
                     ? new Date(purchase.invoiceDate).toLocaleDateString("en-CA")
                     : "",
-                totalAmount: purchase.totalAmount,
 
+                totalAmount: purchase.totalAmount || 0,
                 supplierBillAmount: purchase.supplierBillAmount || 0,
                 paidAmount: purchase.paidAmount || 0,
                 balanceAmount: purchase.balanceAmount || 0,
+                paymentStatus: purchase.paymentStatus || "",
                 paymentHistory: purchase.paymentHistory || [],
+
+                superAdminId: purchase.superAdminId || null,
+                adminId: purchase.adminId || null,
+                createdBy: purchase.createdBy || null,
+                createdAt: purchase.createdAt,
+                updatedAt: purchase.updatedAt,
 
                 items: purchase.items.map((item) => ({
                     _id: item._id,
 
-                    productId: item.productId,
-                    productName: item.productName,
+                    productId: item.productId?._id || item.productId,
+
+                    productName:
+                        item.productName ||
+                        item.productId?.name ||
+                        "",
+
+                    description:
+                        item.description ||
+                        item.productId?.description ||
+                        "",
 
                     brand:
-                        item.productId?.brand ||
                         item.brand ||
+                        item.productId?.brand ||
                         "",
 
                     hsnCode: item.hsnCode || "",
-
-                    gstpercentage:
-                        item.gstpercentage || 0,
-
-                    categoryName:
-                        item.categoryName || "",
+                    gstpercentage: item.gstpercentage || 0,
+                    categoryName: item.categoryName || "",
 
                     flavor: item.flavor || "",
                     litters: item.litters || "",
-
                     qty: item.qty || 0,
-
-                    costPrice:
-                        item.costPrice || 0,
-
+                    costPrice: item.costPrice || 0,
                     mrp: item.mrp || 0,
-
-                    sellingPrice:
-                        item.sellingPrice || 0,
-
+                    sellingPrice: item.sellingPrice || 0,
                     gst: item.gst || 0,
-
-                    barcode:
-                        item.barcode || "",
-
-                    receivedQty:
-                        item.receivedQty || 0,
-
-                    pendingQty:
-                        item.pendingQty || 0,
-                    superAdminId: purchase.superAdminId || null,
-                    adminId: purchase.adminId || null,
-                    createdBy: purchase.createdBy || null,
-                    createdAt: purchase.createdAt,
-                    updatedAt: purchase.updatedAt
+                    barcode: item.barcode || "",
+                    receivedQty: item.receivedQty || 0,
+                    pendingQty: item.pendingQty || 0
                 }))
             }
         });
@@ -990,6 +989,9 @@ exports.updatePurchase = async (req, res) => {
 
                 brand:
                     product.brand || "",
+
+                description:
+                    product.description || "",
 
                 flavor:
                     item.flavor || "",

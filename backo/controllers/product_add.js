@@ -13,6 +13,7 @@ exports.productcreate = async (req, res) => {
         const {
             name,
             brand,
+            description,
             categoryId,
             hsnCode,
             gstRate,
@@ -28,7 +29,7 @@ exports.productcreate = async (req, res) => {
         if (!name || !categoryId) {
             return res.status(400).json({
                 success: false,
-                message: "Name and category are required"
+                message: "Name required"
             });
         }
 
@@ -117,6 +118,10 @@ exports.productcreate = async (req, res) => {
         const product = await Product.create({
             name: String(name).trim(),
             brand: brand ? String(brand).trim() : "",
+
+            description: description
+                ? String(description).trim()
+                : "",
 
             stock: 0,
             reservedStock: 0,
@@ -493,6 +498,7 @@ exports.updateProduct = async (req, res) => {
         const {
             name,
             brand,
+            description,
             categoryId,
             hsnCode,
             gstRate,
@@ -543,7 +549,12 @@ exports.updateProduct = async (req, res) => {
         }
 
         if (name) product.name = String(name).trim();
+
         if (brand !== undefined) product.brand = String(brand).trim();
+        
+        if (description !== undefined) {
+            product.description = String(description).trim();
+        }
 
         if (hsnCode !== undefined) {
             if (!hsnCode) {

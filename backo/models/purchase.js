@@ -64,9 +64,12 @@ const purchaseSchema = new mongoose.Schema({
                 default: ""
             },
 
-
-
             brand: {
+                type: String,
+                default: ""
+            },
+
+            description: {
                 type: String,
                 default: ""
             },

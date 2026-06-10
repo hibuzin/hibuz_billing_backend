@@ -28,7 +28,7 @@ router.post(
 );
 
 router.get(
-    "/:productId",
+    "/product/:productId",
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
    getProductForPurchase
