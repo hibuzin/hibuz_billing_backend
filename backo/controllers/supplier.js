@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Supplier = require("../models/supplier");
 const Counter = require("../models/counter");
 const Purchase = require("../models/purchase");
@@ -499,9 +500,17 @@ exports.supplierbyid = async (req, res) => {
     try {
         const hierarchy = attachHierarchy(req.user);
 
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid supplier id"
+            });
+        }
+
         const supplier = await Supplier.findOne({
             _id: req.params.id,
-            superAdminId: hierarchy.superAdminId
+            superAdminId: hierarchy.superAdminId,
+            isActive: true
         });
 
         if (!supplier) {
@@ -563,12 +572,20 @@ exports.updateSupplier = async (req, res) => {
 
 exports.deletesupplier = async (req, res) => {
     try {
+        if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid supplier id"
+            });
+        }
+
         const hierarchy = attachHierarchy(req.user);
 
         const supplier = await Supplier.findOneAndUpdate(
             {
                 _id: req.params.id,
-                superAdminId: hierarchy.superAdminId
+                superAdminId: hierarchy.superAdminId,
+                isActive: true
             },
             { isActive: false },
             { new: true }
@@ -593,4 +610,4 @@ exports.deletesupplier = async (req, res) => {
             error: error.message
         });
     }
-}
+};
