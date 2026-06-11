@@ -24,7 +24,7 @@ const getNextCustomerId = async () => {
 
 exports.createCustomer = async (req, res) => {
     try {
-        const { name, phone, email, address } = req.body;
+        const { name, phone, email, address, gstNumber } = req.body;
         const { userId, role, superAdminId, adminId } = req.user;
 
         if (!name || !phone) {
@@ -77,6 +77,10 @@ exports.createCustomer = async (req, res) => {
             phone: cleanPhone,
             email,
             address,
+
+            gstNumber: gstNumber
+                ? gstNumber.trim().toUpperCase()
+                : "",
 
             createdBy: userId,
             roleCreatedBy: role,

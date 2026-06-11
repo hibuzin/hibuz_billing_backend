@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Product = require("../models/product");
 const Barcode = require("../models/barcode");
+const PriceLevel = require("../models/price_level");
 const { attachHierarchy } = require("../utils/hierarchy");
 const category = require("../models/category");
 
@@ -23,7 +24,8 @@ exports.productcreate = async (req, res) => {
             mrp,
             costPrice,
             sellingPrice,
-            barcode
+            barcode,
+            priceLevel
         } = req.body;
 
         if (!name || !categoryId) {
@@ -185,12 +187,43 @@ exports.productcreate = async (req, res) => {
             });
         }
 
+        let createdPriceLevel = null;
+
+        if (priceLevel) {
+            createdPriceLevel = await PriceLevel.findOneAndUpdate(
+                {
+                    productId: product._id,
+                    superAdminId: hierarchy.superAdminId
+                },
+                {
+                    productId: product._id,
+                    pricingType: priceLevel.pricingType || "slab",
+                    manualPrice: priceLevel.manualPrice || 0,
+                    autoPricing: priceLevel.autoPricing || {
+                        baseOn: "costPrice",
+                        profitPercent: 0
+                    },
+                    slabs: priceLevel.slabs || [],
+
+                    ...hierarchy,
+                    createdBy: req.user.userId,
+                    isActive: true
+                },
+                {
+                    upsert: true,
+                    new: true,
+                    runValidators: true
+                }
+            );
+        }
+
         res.status(201).json({
             success: true,
             message: "Product created successfully",
             data: {
                 product,
-                barcode: createdBarcode
+                barcode: createdBarcode,
+                priceLevel: createdPriceLevel
             }
         });
 
@@ -551,7 +584,7 @@ exports.updateProduct = async (req, res) => {
         if (name) product.name = String(name).trim();
 
         if (brand !== undefined) product.brand = String(brand).trim();
-        
+
         if (description !== undefined) {
             product.description = String(description).trim();
         }

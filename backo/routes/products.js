@@ -157,8 +157,6 @@ router.post(
 );
 
 
-
-
 router.get("/", verifyToken, authorize("super_admin", "admin", "cashier"), async (req, res) => {
     try {
         const { page = 1, limit = 10, search = "" } = req.query;

@@ -182,7 +182,7 @@ exports.createPurchase = async (req, res) => {
                     },
                     {
                         upsert: true,
-                        returnDocument: "after"
+                        new: true
                     }
                 );
             }
@@ -213,7 +213,7 @@ exports.createPurchase = async (req, res) => {
                     },
                     {
                         upsert: true,
-                        returnDocument: "after",
+                        new: true,
                         runValidators: true
                     }
                 );

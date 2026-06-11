@@ -13,6 +13,13 @@ const customerSchema = new mongoose.Schema(
             trim: true
         },
 
+        gstNumber: {
+            type: String,
+            default: "",
+            trim: true,
+            uppercase: true
+        },
+
         phone: {
             type: String,
             required: true,

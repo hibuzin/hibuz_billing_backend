@@ -11,6 +11,7 @@ const CashRegister = require("../models/cashregister");
 const AuditLog = require("../models/audit_log");
 
 
+
 const getNextInvoiceNo = async (superAdminId) => {
     const result = await counter.findOneAndUpdate(
         { name: `invoice_${superAdminId}` },
@@ -576,7 +577,7 @@ exports.searchProductsForBill = async (req, res) => {
         const searchValue = search.trim();
         const hierarchy = attachHierarchy(req.user);
 
-        
+
         const products = await Product.find({
             superAdminId: hierarchy.superAdminId,
             name: { $regex: searchValue, $options: "i" },
@@ -754,11 +755,38 @@ exports.getBills = async (req, res) => {
             .populate("createdBy", "name email role")
             .sort({ createdAt: -1 });
 
+        const billsWithFormattedDates = bills.map(bill => ({
+            ...bill.toObject(),
+
+            createdAt: new Date(bill.createdAt).toLocaleString("en-IN", {
+                timeZone: "Asia/Kolkata",
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: true
+            }),
+
+            updatedAt: new Date(bill.updatedAt).toLocaleString("en-IN", {
+                timeZone: "Asia/Kolkata",
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: true
+            })
+        }));
+
         return res.status(200).json({
             success: true,
             message: "Bills fetched successfully",
             count: bills.length,
-            data: bills
+
+            data: billsWithFormattedDates
         });
 
     } catch (error) {
@@ -942,48 +970,61 @@ exports.cashierWiseSales = async (req, res) => {
 
 exports.getBillById = async (req, res) => {
     try {
-        const bill = await Bill.findById(req.params.id);
+        const hierarchy = attachHierarchy(req.user);
+
+        const bill = await Bill.findOne({
+            _id: req.params.id,
+            superAdminId: hierarchy.superAdminId
+        })
+            .populate("customerId", "name phone customerId")
+            .populate("createdBy", "name email role");
 
         if (!bill) {
-            return errorResponse(res, "Bill not found", 404);
+            return res.status(404).json({
+                success: false,
+                message: "Bill not found"
+            });
         }
 
+        const formattedBill = {
+            ...bill.toObject(),
 
-        let subTotal = 0;
-        let totalGST = 0;
+            createdAt: new Date(bill.createdAt).toLocaleString("en-IN", {
+                timeZone: "Asia/Kolkata",
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: true
+            }),
 
-        const items = bill.items.map(item => {
-            const gstAmount = (item.price * item.gst) / 100;
-            const finalPrice = item.price + gstAmount;
+            updatedAt: new Date(bill.updatedAt).toLocaleString("en-IN", {
+                timeZone: "Asia/Kolkata",
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: true
+            })
+        };
 
-            subTotal += item.price;
-            totalGST += gstAmount;
-
-            return {
-                name: item.name,
-                price: item.price,
-                gst: item.gst,
-                gstAmount,
-                finalPrice
-            };
+        return res.status(200).json({
+            success: true,
+            message: "Bill fetched successfully",
+            data: formattedBill
         });
 
-        const grandTotal = subTotal + totalGST;
-
-        return successResponse(res, {
-            billId: bill._id,
-            items,
-            summary: {
-                subTotal,
-                totalGST,
-                grandTotal
-            },
-            createdAt: bill.createdAt
-        }, "Bill fetched successfully");
-
-    } catch (err) {
-        return errorResponse(res, "Server error", 500);
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message
+        });
     }
-}
+};
 
 

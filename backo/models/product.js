@@ -58,6 +58,50 @@ const productSchema = new mongoose.Schema({
         default: 0
     },
 
+    priceLevel: {
+        pricingType: {
+            type: String,
+            enum: ["manual", "auto", "slab"],
+            default: "manual"
+        },
+
+        manualPrice: {
+            type: Number,
+            default: 0
+        },
+
+        autoPricing: {
+            baseOn: {
+                type: String,
+                enum: ["costPrice", "mrp"],
+                default: "costPrice"
+            },
+            profitPercent: {
+                type: Number,
+                default: 0
+            }
+        },
+
+        slabs: [
+            {
+                minQty: {
+                    type: Number,
+                    required: true
+                },
+
+                maxQty: {
+                    type: Number,
+                    default: null
+                },
+
+                price: {
+                    type: Number,
+                    required: true
+                }
+            }
+        ]
+    },
+
     hsnCode: {
         type: String,
         default: ""
