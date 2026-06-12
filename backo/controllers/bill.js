@@ -613,6 +613,13 @@ exports.searchProductsForBill = async (req, res) => {
                     availableQty: { $gt: 0 }
                 });
 
+
+                const priceLevel = await PriceLevel.findOne({
+                    productId: p._id,
+                    superAdminId: hierarchy.superAdminId,
+                    isActive: true
+                });
+
                 return {
                     productId: p._id,
                     productName: p.name,
@@ -621,9 +628,25 @@ exports.searchProductsForBill = async (req, res) => {
                     qty: 1,
                     stock: p.stock,
 
-                    mrp: barcode?.mrp || 0,
-                    sellingPrice: barcode?.sellingPrice || 0,
-                    costPrice: barcode?.costPrice || 0,
+                    mrp: barcode?.mrp || p.mrp || 0,
+                    sellingPrice: barcode?.sellingPrice || p.sellingPrice || 0,
+                    costPrice: barcode?.costPrice || p.costPrice || 0,
+                    gstRate: p.gstRate || 0,
+
+                    priceLevel: priceLevel ? {
+                        pricingType: priceLevel.pricingType,
+                        manualPrice: priceLevel.manualPrice,
+                        autoPricing: priceLevel.autoPricing,
+                        slabs: priceLevel.slabs
+                    } : null,
+
+                    slabPrices: priceLevel?.pricingType === "slab"
+                        ? priceLevel.slabs.map(s => ({
+                            minQty: s.minQty,
+                            maxQty: s.maxQty,
+                            price: s.price
+                        }))
+                        : [],
 
                     flavor: barcode?.flavor || "",
                     litters: barcode?.litters || "",
@@ -641,21 +664,51 @@ exports.searchProductsForBill = async (req, res) => {
             availableQty: { $gt: 0 }
         }).populate("productId");
 
-        const barcodeData = barcodes
-            .filter((b) => b.productId)
-            .map((b) => ({
-                productId: b.productId._id,
-                productName: b.productId.name,
-                brand: b.productId.brand,
-                barcode: b.code,
-                qty: 1,
-                stock: b.productId.stock,
-                mrp: b.mrp || 0,
-                flavor: b.flavor || "",
-                litters: b.litters || "",
-                kg: b.kg || "",
-                gstRate: b.gstRate || b.productId.gstRate || 0
-            }));
+        const barcodeData = await Promise.all(
+            barcodes
+                .filter((b) => b.productId)
+                .map(async (b) => {
+                    const priceLevel = await PriceLevel.findOne({
+                        productId: b.productId._id,
+                        superAdminId: hierarchy.superAdminId,
+                        isActive: true
+                    });
+
+                    return {
+                        productId: b.productId._id,
+                        productName: b.productId.name,
+                        brand: b.productId.brand,
+                        barcode: b.code,
+                        qty: 1,
+                        stock: b.productId.stock,
+
+                        mrp: b.mrp || b.productId.mrp || 0,
+                        sellingPrice: b.sellingPrice || b.productId.sellingPrice || 0,
+                        costPrice: b.costPrice || b.productId.costPrice || 0,
+                        gstRate: b.productId.gstRate || 0,
+
+                        priceLevel: priceLevel ? {
+                            pricingType: priceLevel.pricingType,
+                            manualPrice: priceLevel.manualPrice,
+                            autoPricing: priceLevel.autoPricing,
+                            slabs: priceLevel.slabs
+                        } : null,
+
+                        slabPrices: priceLevel?.pricingType === "slab"
+                            ? priceLevel.slabs.map(s => ({
+                                minQty: s.minQty,
+                                maxQty: s.maxQty,
+                                price: s.price
+                            }))
+                            : [],
+
+                        flavor: b.flavor || "",
+                        litters: b.litters || "",
+                        kg: b.kg || "",
+                        gstRate: b.productId.gstRate || 0
+                    };
+                })
+        );
 
 
         const merged = [...barcodeData, ...productData];
