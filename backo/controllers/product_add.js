@@ -298,16 +298,32 @@ exports.allProducts = async (req, res) => {
 
         products = await Promise.all(
             products.map(async (product) => {
+
                 const barcode = await Barcode.findOne({
                     productId: product._id,
                     superAdminId: hierarchy.superAdminId
+                }).lean();
+
+                const priceLevel = await PriceLevel.findOne({
+                    productId: product._id,
+                    superAdminId: hierarchy.superAdminId,
+                    isActive: true
                 }).lean();
 
                 return {
                     ...product,
                     barcode: barcode?.code || "",
                     barcodeId: barcode?._id || "",
-                    availableQty: barcode?.availableQty || 0
+                    availableQty: barcode?.availableQty || 0,
+
+                    priceLevel: priceLevel
+                        ? {
+                            pricingType: priceLevel.pricingType,
+                            manualPrice: priceLevel.manualPrice,
+                            autoPricing: priceLevel.autoPricing,
+                            slabs: priceLevel.slabs
+                        }
+                        : null
                 };
             })
         );
@@ -486,9 +502,7 @@ exports.searchProductsByCategory = async (req, res) => {
 };
 
 exports.ProductsById = async (req, res) => {
-
     try {
-
         const { id } = req.params;
 
         const hierarchy = attachHierarchy(req.user);
@@ -498,7 +512,8 @@ exports.ProductsById = async (req, res) => {
             superAdminId: hierarchy.superAdminId
         })
             .populate("categoryId", "name hsnCode gstRate")
-            .populate("hsnId", "hsnCode gstRate cgst sgst igst cess");
+            .populate("hsnId", "hsnCode gstRate cgst sgst igst cess")
+            .lean();
 
         if (!product) {
             return res.status(404).json({
@@ -507,19 +522,34 @@ exports.ProductsById = async (req, res) => {
             });
         }
 
+        const barcode = await Barcode.findOne({
+            productId: product._id,
+            superAdminId: hierarchy.superAdminId
+        }).lean();
+
+        const priceLevel = await PriceLevel.findOne({
+            productId: product._id,
+            superAdminId: hierarchy.superAdminId,
+            isActive: true
+        }).lean();
+
         return res.status(200).json({
             success: true,
-            data: product
+            data: {
+                ...product,
+                barcode: barcode?.code || "",
+                barcodeId: barcode?._id || "",
+                availableQty: barcode?.availableQty || 0,
+                priceLevel: priceLevel || null
+            }
         });
 
     } catch (err) {
-
         return res.status(500).json({
             success: false,
             message: "Server error",
             error: err.message
         });
-
     }
 };
 

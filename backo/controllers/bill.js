@@ -86,6 +86,10 @@ exports.createBill = async (req, res) => {
             }
 
             let price = Number(barcode.sellingPrice || 0);
+
+            let appliedPriceLevel = "normal";
+            let appliedSlab = null;
+
             const gstRate = Number(barcode.gstRate || product.gstRate || 0);
 
             const taxableAmount = price * qty;
@@ -107,6 +111,8 @@ exports.createBill = async (req, res) => {
                 qty,
                 mrp: barcode.mrp || 0,
                 price,
+                appliedPriceLevel,
+                appliedSlab,
                 gstRate,
                 gstAmount,
                 finalPrice
@@ -174,6 +180,9 @@ exports.createBill = async (req, res) => {
 
             let price = Number(barcode.sellingPrice || 0);
 
+            let appliedPriceLevel = "normal";
+            let appliedSlab = null;
+
             const productPriceLevel = await PriceLevel.findOne({
                 productId: product._id,
                 superAdminId: hierarchy.superAdminId,
@@ -188,6 +197,7 @@ exports.createBill = async (req, res) => {
                 ) {
 
                     price = Number(productPriceLevel.manualPrice || price);
+                    appliedPriceLevel = "manual";
 
                 } else if (
                     priceLevel === "auto" &&
@@ -209,6 +219,8 @@ exports.createBill = async (req, res) => {
                         basePrice +
                         (basePrice * profitPercent / 100);
 
+                    appliedPriceLevel = "auto";
+
                 } else if (
                     priceLevel === "slab" &&
                     productPriceLevel.pricingType === "slab"
@@ -227,6 +239,12 @@ exports.createBill = async (req, res) => {
 
                     if (slab) {
                         price = Number(slab.price || price);
+                        appliedPriceLevel = "slab";
+                        appliedSlab = {
+                            minQty: slab.minQty,
+                            maxQty: slab.maxQty,
+                            price: slab.price
+                        };
                     }
                 }
             }
@@ -267,6 +285,8 @@ exports.createBill = async (req, res) => {
 
                 qty,
                 mrp: barcode.mrp || 0,
+                appliedPriceLevel,
+                appliedSlab,
                 price,
                 gstRate,
                 gstAmount,
@@ -562,6 +582,7 @@ exports.createBill = async (req, res) => {
         });
     }
 };
+
 
 exports.searchProductsForBill = async (req, res) => {
     try {

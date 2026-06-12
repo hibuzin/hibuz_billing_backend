@@ -19,6 +19,21 @@ const billSchema = new mongoose.Schema({
             litters: String,
 
             mrp: Number,
+
+            appliedPriceLevel: {
+                type: String,
+                default: "normal"
+            },
+
+            appliedSlab: {
+                minQty: Number,
+                maxQty: {
+                    type: Number,
+                    default: null
+                },
+                price: Number
+            },
+
             price: Number,
 
             qty: {
