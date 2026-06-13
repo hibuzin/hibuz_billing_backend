@@ -58,10 +58,15 @@ exports.productcreate = async (req, res) => {
 
         const processedGstRate = Number(gstRate || 0);
 
-        if (isNaN(processedGstRate) || processedGstRate < 0) {
+        const allowedGstRates = [0, 5, 12, 18, 28];
+
+        if (
+            isNaN(processedGstRate) ||
+            !allowedGstRates.includes(processedGstRate)
+        ) {
             return res.status(400).json({
                 success: false,
-                message: "Valid GST rate is required"
+                message: "GST rate must be 0, 5, 12, 18 or 28"
             });
         }
 

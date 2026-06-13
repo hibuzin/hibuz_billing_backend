@@ -17,8 +17,13 @@ exports.allstockcheck = async (req, res) => {
 
         let data = [];
 
-        purchases.forEach((purchase) => {
-            purchase.items.forEach((item) => {
+        for (const purchase of purchases) {
+            for (const item of purchase.items) {
+
+                const barcode = await Barcode.findOne({
+                    productId: item.productId?._id,
+                    superAdminId: hierarchy.superAdminId
+                }).select("code");
 
                 const currentStock = Number(item.productId?.stock || 0);
                 const purchasedQty = Number(item.qty || 0);
@@ -34,6 +39,8 @@ exports.allstockcheck = async (req, res) => {
                     productId: item.productId?._id || "",
                     productName: item.productId?.name || "",
                     brand: item.productId?.brand || item.brand || "",
+
+                    barcode: barcode?.code || "",
 
                     currentStock,
 
@@ -57,8 +64,8 @@ exports.allstockcheck = async (req, res) => {
                                 ? "Low Stock"
                                 : "Available"
                 });
-            });
-        });
+            }
+        }
 
         return res.status(200).json({
             success: true,
@@ -73,7 +80,8 @@ exports.allstockcheck = async (req, res) => {
             error: err.message
         });
     }
-}
+};
+
 
 exports.getStockValue = async (req, res) => {
     try {
@@ -89,12 +97,17 @@ exports.getStockValue = async (req, res) => {
         const round2 = (num) =>
             Math.round((Number(num) + Number.EPSILON) * 100) / 100;
 
-        purchases.forEach((purchase) => {
-            purchase.items.forEach((item) => {
+        for (const purchase of purchases) {
+            for (const item of purchase.items) {
                 const product = item.productId;
-                if (!product) return;
+                if (!product) continue;
 
-                const key = `${product._id}_${item.mrp}_${item.costPrice}_${item.sellingPrice}_${item.flavor}_${item.litters}`;
+                const barcode = await Barcode.findOne({
+                    productId: product._id,
+                    superAdminId: hierarchy.superAdminId
+                }).select("code");
+
+                const key = `${product._id}_${barcode?.code || ""}_${item.mrp}_${item.costPrice}_${item.sellingPrice}_${item.flavor}_${item.litters}`;
 
                 if (!stockMap[key]) {
                     const currentStock = Number(product.stock || 0);
@@ -103,6 +116,8 @@ exports.getStockValue = async (req, res) => {
                         productId: product._id,
                         productName: product.name || "",
                         brand: product.brand || item.brand || "",
+
+                        barcode: barcode?.code || "",
 
                         currentStock,
 
@@ -119,8 +134,8 @@ exports.getStockValue = async (req, res) => {
                         mrpValue: 0
                     };
                 }
-            });
-        });
+            }
+        }
 
         let totalCostValue = 0;
         let totalSellingValue = 0;

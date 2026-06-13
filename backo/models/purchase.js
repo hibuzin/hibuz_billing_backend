@@ -152,7 +152,6 @@ const purchaseSchema = new mongoose.Schema({
             },
 
 
-
             barcode: {
                 type: String,
                 default: ""
