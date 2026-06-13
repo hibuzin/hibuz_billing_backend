@@ -92,9 +92,9 @@ exports.createBill = async (req, res) => {
 
             const gstRate = Number(barcode.gstRate || product.gstRate || 0);
 
-            const taxableAmount = price * qty;
-            const gstAmount = Number(((taxableAmount * gstRate) / 100).toFixed(2));
-            const finalPrice = Number((taxableAmount + gstAmount).toFixed(2));
+            const finalPrice = Number((price * qty).toFixed(2));
+            const taxableAmount = Number((finalPrice / (1 + gstRate / 100)).toFixed(2));
+            const gstAmount = Number((finalPrice - taxableAmount).toFixed(2));
 
             subTotal += taxableAmount;
             totalGST += gstAmount;
@@ -260,9 +260,9 @@ exports.createBill = async (req, res) => {
 
             }
 
-            const taxableAmount = price * qty;
-            const gstAmount = Number(((taxableAmount * gstRate) / 100).toFixed(2));
-            const finalPrice = Number((taxableAmount + gstAmount).toFixed(2));
+            const finalPrice = Number((price * qty).toFixed(2));
+            const taxableAmount = Number((finalPrice / (1 + gstRate / 100)).toFixed(2));
+            const gstAmount = Number((finalPrice - taxableAmount).toFixed(2));
 
 
             subTotal += taxableAmount;
