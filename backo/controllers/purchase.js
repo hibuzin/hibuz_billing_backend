@@ -4,7 +4,7 @@ const Purchase = require("../models/purchase");
 const Product = require("../models/product");
 const Supplier = require("../models/supplier");
 const Barcode = require("../models/barcode");
-const Counter = require("../models/Counter");
+const Counter = require("../models/counter");
 const PriceLevel = require("../models/price_level");
 const { attachHierarchy } = require("../utils/hierarchy");
 
