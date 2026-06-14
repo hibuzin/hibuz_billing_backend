@@ -250,6 +250,293 @@ exports.productcreate = async (req, res) => {
 };
 
 
+exports.bulkProductCreate = async (req, res) => {
+    try {
+        const { products } = req.body;
+
+        if (!Array.isArray(products) || products.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Products array is required"
+            });
+        }
+
+        const hierarchy = attachHierarchy(req.user);
+        const allowedGstRates = [0, 5, 12, 18, 28];
+
+        const createdProducts = [];
+        const errors = [];
+        const requestBarcodes = new Set();
+
+        for (let i = 0; i < products.length; i++) {
+            try {
+                const item = products[i];
+
+                const name = item.name ? String(item.name).trim() : "";
+                const brand = item.brand ? String(item.brand).trim() : "";
+                const description = item.description ? String(item.description).trim() : "";
+                const categoryId = item.categoryId;
+                const hsnCode = item.hsnCode ? String(item.hsnCode).trim() : "";
+                const barcodeCode = item.barcode ? String(item.barcode).trim() : "";
+
+                const processedGstRate = Number(item.gstRate || 0);
+                const processedMrp = Number(item.mrp);
+                const processedCostPrice = Number(item.costPrice);
+                const processedSellingPrice = Number(item.sellingPrice);
+
+                const processedFlavors = Array.isArray(item.flavor)
+                    ? item.flavor.map(x => String(x).trim()).filter(Boolean)
+                    : [];
+
+                const processedLitters = Array.isArray(item.litters)
+                    ? item.litters.map(x => String(x).trim()).filter(Boolean)
+                    : [];
+
+                const processedKg = Array.isArray(item.kg)
+                    ? item.kg.map(x => String(x).trim()).filter(Boolean)
+                    : [];
+
+                if (!name || !categoryId) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Name and category required"
+                    });
+                    continue;
+                }
+
+                if (!hsnCode) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "HSN code is required"
+                    });
+                    continue;
+                }
+
+                if (isNaN(processedGstRate) || !allowedGstRates.includes(processedGstRate)) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "GST rate must be 0, 5, 12, 18 or 28"
+                    });
+                    continue;
+                }
+
+                if (isNaN(processedMrp) || processedMrp <= 0) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Valid MRP is required"
+                    });
+                    continue;
+                }
+
+                if (isNaN(processedCostPrice) || processedCostPrice < 0) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Valid cost price is required"
+                    });
+                    continue;
+                }
+
+                if (isNaN(processedSellingPrice) || processedSellingPrice < 0) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Valid selling price is required"
+                    });
+                    continue;
+                }
+
+                if (processedCostPrice > processedMrp) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Cost price cannot be greater than MRP"
+                    });
+                    continue;
+                }
+
+                if (processedSellingPrice > processedMrp) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Selling price cannot be greater than MRP"
+                    });
+                    continue;
+                }
+
+                const cat = await category.findOne({
+                    _id: categoryId,
+                    superAdminId: hierarchy.superAdminId
+                });
+
+                if (!cat) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Category not found"
+                    });
+                    continue;
+                }
+
+                if (barcodeCode) {
+                    if (requestBarcodes.has(barcodeCode)) {
+                        errors.push({
+                            row: i + 1,
+                            name,
+                            barcode: barcodeCode,
+                            message: "Duplicate barcode in request"
+                        });
+                        continue;
+                    }
+
+                    requestBarcodes.add(barcodeCode);
+
+                    const existingBarcode = await Barcode.findOne({
+                        code: barcodeCode,
+                        superAdminId: hierarchy.superAdminId
+                    });
+
+                    if (existingBarcode) {
+                        errors.push({
+                            row: i + 1,
+                            name,
+                            barcode: barcodeCode,
+                            message: "Barcode already exists in database"
+                        });
+                        continue;
+                    }
+                }
+
+                const product = await Product.create({
+                    name,
+                    brand,
+                    description,
+
+                    stock: 0,
+                    reservedStock: 0,
+
+                    flavor: processedFlavors,
+                    litters: processedLitters,
+                    kg: processedKg,
+
+                    mrp: processedMrp,
+                    costPrice: processedCostPrice,
+                    sellingPrice: processedSellingPrice,
+
+                    categoryId,
+                    categoryName: cat.name || "",
+
+                    hsnCode,
+                    gstRate: processedGstRate,
+
+                    ...hierarchy,
+                    createdBy: req.user.userId
+                });
+
+                let createdBarcode = null;
+
+                if (barcodeCode) {
+                    createdBarcode = await Barcode.create({
+                        productId: product._id,
+                        code: barcodeCode,
+
+                        qty: 0,
+                        availableQty: 0,
+
+                        mrp: processedMrp,
+                        costPrice: processedCostPrice,
+                        sellingPrice: processedSellingPrice,
+                        gstRate: processedGstRate,
+
+                        flavor: processedFlavors[0] || "",
+                        litters: processedLitters[0] || "",
+
+                        isSold: false,
+
+                        ...hierarchy,
+                        createdBy: req.user.userId
+                    });
+                }
+
+                let createdPriceLevel = null;
+
+                if (item.priceLevel) {
+                    createdPriceLevel = await PriceLevel.findOneAndUpdate(
+                        {
+                            productId: product._id,
+                            superAdminId: hierarchy.superAdminId
+                        },
+                        {
+                            productId: product._id,
+                            pricingType: item.priceLevel.pricingType || "slab",
+                            manualPrice: item.priceLevel.manualPrice || 0,
+                            autoPricing: item.priceLevel.autoPricing || {
+                                baseOn: "costPrice",
+                                profitPercent: 0
+                            },
+                            slabs: item.priceLevel.slabs || [],
+
+                            ...hierarchy,
+                            createdBy: req.user.userId,
+                            isActive: true
+                        },
+                        {
+                            upsert: true,
+                            new: true,
+                            runValidators: true
+                        }
+                    );
+                }
+
+                createdProducts.push({
+                    row: i + 1,
+                    product,
+                    barcode: createdBarcode,
+                    priceLevel: createdPriceLevel
+                });
+
+            } catch (err) {
+                errors.push({
+                    row: i + 1,
+                    message: err.code === 11000
+                        ? "Duplicate product or barcode"
+                        : err.message
+                });
+            }
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: "Bulk product add completed",
+            total: products.length,
+            createdCount: createdProducts.length,
+            errorCount: errors.length,
+            data: createdProducts,
+            errors
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+};
+
 exports.getproductMrps = async (req, res) => {
     try {
         const { productId } = req.params;
