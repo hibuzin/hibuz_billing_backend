@@ -4,12 +4,23 @@ const Purchase = require("../models/purchase");
 const Product = require("../models/product");
 const Supplier = require("../models/supplier");
 const Barcode = require("../models/barcode");
+const Counter = require("../models/Counter");
 const PriceLevel = require("../models/price_level");
 const { attachHierarchy } = require("../utils/hierarchy");
 
+const getNextPurchaseInvoiceNo = async (superAdminId) => {
+    const counter = await Counter.findOneAndUpdate(
+        { name: `purchase_invoice_${superAdminId}` },
+        { $inc: { seq: 1 } },
+        { new: true, upsert: true }
+    );
+
+    return `PUR-${String(counter.seq).padStart(5, "0")}`;
+};
+
 exports.createPurchase = async (req, res) => {
     try {
-        const { supplierId, items, invoiceNo, invoiceDate, supplierBillAmount, paidAmount } = req.body;
+        const { supplierId, items, invoiceDate, supplierBillAmount, paidAmount } = req.body;
 
         if (!supplierId || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({
@@ -18,12 +29,7 @@ exports.createPurchase = async (req, res) => {
             });
         }
 
-        if (!invoiceNo) {
-            return res.status(400).json({
-                success: false,
-                message: "Invoice number is required"
-            });
-        }
+
 
         if (!invoiceDate) {
             return res.status(400).json({
@@ -47,6 +53,8 @@ exports.createPurchase = async (req, res) => {
         }
 
         const hierarchy = attachHierarchy(req.user);
+
+        const invoiceNo = await getNextPurchaseInvoiceNo(hierarchy.superAdminId);
 
         const supplier = await Supplier.findOne({
             _id: supplierId,
@@ -326,7 +334,11 @@ exports.createPurchase = async (req, res) => {
 
                 invoiceNo: responsePurchase.invoiceNo,
 
-                invoiceDate: responsePurchase.invoiceDate,
+                invoiceDate: responsePurchase.invoiceDate
+                    ? new Date(responsePurchase.invoiceDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
 
                 totalAmount: round2(responsePurchase.totalAmount),
 
