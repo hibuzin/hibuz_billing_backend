@@ -52,102 +52,60 @@ exports.registerSuperAdmin = async (req, res) => {
             pincode,
             city,
             gstnumber
-
         } = req.body;
 
-        if (
-            !CompanyName ||
-            !CompanyPhone ||
-            !CompanyEmail ||
-            !password
-
-        ) {
+        if (!CompanyName || !CompanyPhone || !CompanyEmail || !password) {
             return res.status(400).json({
                 success: false,
-                message: "All fields are required"
+                message: "Company name, phone, email and password are required"
             });
         }
 
-        const alreadySuperAdmin = await User.findOne({
-            role: "super_admin"
-        });
-
-        if (alreadySuperAdmin) {
-            return res.status(400).json({
-                success: false,
-                message: "Super Admin already exists"
-            });
-        }
+        const cleanEmail = CompanyEmail.trim().toLowerCase();
+        const cleanPhone = CompanyPhone.trim();
 
         const existingUser = await User.findOne({
-            CompanyEmail: CompanyEmail.trim().toLowerCase()
-
+            $or: [
+                { CompanyEmail: cleanEmail },
+                { CompanyPhone: cleanPhone }
+            ]
         });
 
         if (existingUser) {
             return res.status(400).json({
                 success: false,
-                message: "Company email already registered"
+                message: "Shop already registered with this email or phone"
             });
         }
 
-        const hashed = await bcrypt.hash(password, 10);
+        const hashedPassword = await bcrypt.hash(password, 10);
 
-        const user = new User({
+        const user = await User.create({
             CompanyName: CompanyName.trim(),
-
-            CompanyPhone: CompanyPhone.trim(),
-
-            CompanyEmail:
-                CompanyEmail.trim().toLowerCase(),
-
-            password: hashed,
-
-            address: address ? address.trim() : "",
-
-            state: state ? state.trim() : "",
-
-            pincode: pincode ? pincode.trim() : "",
-
-            city: city ? city.trim() : "",
-
-            gstnumber: gstnumber
-                ? gstnumber.trim().toUpperCase()
-                : "",
+            CompanyPhone: cleanPhone,
+            CompanyEmail: cleanEmail,
+            password: hashedPassword,
+            address: address?.trim() || "",
+            state: state?.trim() || "",
+            pincode: pincode?.trim() || "",
+            city: city?.trim() || "",
+            gstnumber: gstnumber?.trim().toUpperCase() || "",
             role: "super_admin"
         });
 
-        await user.save();
-
         return res.status(201).json({
             success: true,
-            message: "Super Admin created successfully",
+            message: "Shop super admin created successfully",
             data: {
                 id: user._id,
                 CompanyName: user.CompanyName,
                 CompanyPhone: user.CompanyPhone,
                 CompanyEmail: user.CompanyEmail,
-
-                ...(user.address && {
-                    address: user.address
-                }),
-
-                ...(user.state && {
-                    state: user.state
-                }),
-
-                ...(user.pincode && {
-                    pincode: user.pincode
-                }),
-
-                ...(user.city && {
-                    city: user.city
-                }),
-
-                ...(user.gstnumber && {
-                    gstnumber: user.gstnumber
-                }),
-
+                address: user.address,
+                state: user.state,
+                pincode: user.pincode,
+                city: user.city,
+                gstnumber: user.gstnumber,
                 role: user.role
             }
         });
@@ -160,9 +118,6 @@ exports.registerSuperAdmin = async (req, res) => {
         });
     }
 };
-
-
-
 
 
 exports.login = async (req, res) => {
@@ -179,7 +134,10 @@ exports.login = async (req, res) => {
         }
 
         let user = await User.findOne({
-            CompanyEmail: loginValue
+            $or: [
+                { CompanyEmail: loginValue },
+                { CompanyPhone: loginValue }
+            ]
         }).select("+password");
 
         if (!user) {
@@ -212,10 +170,14 @@ exports.login = async (req, res) => {
 
         if (user.role === "super_admin") {
             superAdminId = user._id;
-        } else if (user.role === "admin") {
+        }
+
+        if (user.role === "admin") {
             superAdminId = user.superAdminId;
             adminId = user._id;
-        } else if (user.role === "cashier") {
+        }
+
+        if (user.role === "cashier") {
             superAdminId = user.superAdminId;
             adminId = user.adminId || null;
         }
@@ -224,8 +186,8 @@ exports.login = async (req, res) => {
             {
                 userId: user._id,
                 role: user.role,
-                adminId,
-                superAdminId
+                superAdminId,
+                adminId
             },
             process.env.JWT_SECRET,
             { expiresIn: "7d" }
@@ -234,29 +196,25 @@ exports.login = async (req, res) => {
         user.lastLogin = new Date();
         await user.save();
 
-        let userData = {
-            userId: user._id,
-            role: user.role
-        };
-
-        if (user.role === "super_admin") {
-            userData = {
-                ...userData,
-                CompanyName: user.CompanyName,
-                CompanyPhone: user.CompanyPhone,
-                CompanyEmail: user.CompanyEmail,
-                superAdminId
-            };
-        } else {
-            userData = {
-                ...userData,
-                name: user.name,
-                email: user.email || "",
-                phone: user.phone,
-                adminId,
-                superAdminId
-            };
-        }
+        const userData =
+            user.role === "super_admin"
+                ? {
+                    userId: user._id,
+                    role: user.role,
+                    CompanyName: user.CompanyName,
+                    CompanyPhone: user.CompanyPhone,
+                    CompanyEmail: user.CompanyEmail,
+                    superAdminId
+                }
+                : {
+                    userId: user._id,
+                    role: user.role,
+                    name: user.name,
+                    email: user.email || "",
+                    phone: user.phone,
+                    superAdminId,
+                    adminId
+                };
 
         return res.status(200).json({
             success: true,
@@ -265,10 +223,11 @@ exports.login = async (req, res) => {
             user: userData
         });
 
-    } catch (error) {
+    } catch (err) {
         return res.status(500).json({
             success: false,
-            message: error.message
+            message: "Server error",
+            error: err.message
         });
     }
 };
