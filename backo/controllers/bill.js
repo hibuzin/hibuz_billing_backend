@@ -59,9 +59,18 @@ exports.createBill = async (req, res) => {
 
         const gstAuditItems = [];
 
+        const codeQtyMap = {};
+
         for (const code of codes || []) {
-            const qty = 1;
             const searchValue = String(code).trim();
+
+            if (!searchValue) continue;
+
+            codeQtyMap[searchValue] =
+                (codeQtyMap[searchValue] || 0) + 1;
+        }
+
+        for (const [searchValue, qty] of Object.entries(codeQtyMap)) {
 
             let barcode = await Barcode.findOne({
                 code: searchValue,
@@ -85,10 +94,16 @@ exports.createBill = async (req, res) => {
                 });
             }
 
-            let price = Number(barcode.sellingPrice || 0);
+            const normalSellingPrice = Number(barcode.sellingPrice || 0);
+
+            let price = normalSellingPrice;
+            let slabPrice = null;
+            let discountPerItem = 0;
+            let totalDiscount = 0;
 
             let appliedPriceLevel = "normal";
             let appliedSlab = null;
+
 
             const gstRate = Number(barcode.gstRate || product.gstRate || 0);
 
@@ -110,7 +125,7 @@ exports.createBill = async (req, res) => {
                 litters: barcode.litters || "",
                 qty,
                 mrp: barcode.mrp || 0,
-                price,
+                sellingPrice: barcode.sellingPrice || 0,
                 appliedPriceLevel,
                 appliedSlab,
                 gstRate,
@@ -124,7 +139,7 @@ exports.createBill = async (req, res) => {
                     productName: product.name || "",
                     barcode: barcode.code,
                     qty,
-                    price,
+                    sellingPrice: barcode.sellingPrice || 0,
                     gstRate,
                     gstAmount,
                     finalPrice
@@ -178,7 +193,14 @@ exports.createBill = async (req, res) => {
 
             }
 
-            let price = Number(barcode.sellingPrice || 0);
+
+
+            const normalSellingPrice = Number(barcode.sellingPrice || 0);
+
+            let price = normalSellingPrice;
+            let slabPrice = null;
+            let discountPerItem = 0;
+            let totalDiscount = 0;
 
             let appliedPriceLevel = "normal";
             let appliedSlab = null;
@@ -238,12 +260,21 @@ exports.createBill = async (req, res) => {
                     });
 
                     if (slab) {
-                        price = Number(slab.price || price);
+                        slabPrice = Number(slab.price || normalSellingPrice);
+
+                        discountPerItem = Number((normalSellingPrice - slabPrice).toFixed(2));
+                        totalDiscount = Number((discountPerItem * qty).toFixed(2));
+
+                        price = slabPrice; // total calculation uses slab price
+
                         appliedPriceLevel = "slab";
                         appliedSlab = {
                             minQty: slab.minQty,
                             maxQty: slab.maxQty,
-                            price: slab.price
+                            slabPrice,
+                            normalSellingPrice,
+                            discountPerItem,
+                            totalDiscount
                         };
                     }
                 }
@@ -285,12 +316,21 @@ exports.createBill = async (req, res) => {
 
                 qty,
                 mrp: barcode.mrp || 0,
+
+
                 appliedPriceLevel,
                 appliedSlab,
-                price,
+
+
+                sellingPrice: normalSellingPrice,
+                normalSellingPrice,
+                slabPrice,
+                discountPerItem,
+                totalDiscount,
+
+                finalPrice,
                 gstRate,
                 gstAmount,
-                finalPrice
             });
 
 
@@ -308,10 +348,6 @@ exports.createBill = async (req, res) => {
             }
 
 
-            barcode.availableQty = Math.max(Number(barcode.availableQty || 0) - qty, 0);
-
-            await barcode.save();
-
             const availableStock =
                 Number(product.stock || 0) -
                 Number(product.reservedStock || 0);
@@ -322,6 +358,13 @@ exports.createBill = async (req, res) => {
                     message: `${product.name} stock not available`
                 });
             }
+
+            barcode.availableQty = Math.max(
+                Number(barcode.availableQty || 0) - qty,
+                0
+            );
+
+            await barcode.save();
 
             const stockUpdate = await Product.updateOne(
                 {
@@ -582,6 +625,8 @@ exports.createBill = async (req, res) => {
         });
     }
 };
+
+
 
 
 exports.searchProductsForBill = async (req, res) => {

@@ -13,14 +13,10 @@ exports.productcreate = async (req, res) => {
     try {
         const {
             name,
-            brand,
             description,
             categoryId,
             hsnCode,
             gstRate,
-            flavor,
-            litters,
-            kg,
             mrp,
             costPrice,
             sellingPrice,
@@ -70,18 +66,6 @@ exports.productcreate = async (req, res) => {
             });
         }
 
-        const processedFlavors = Array.isArray(flavor)
-            ? flavor.map(x => String(x).trim()).filter(Boolean)
-            : [];
-
-        const processedLitters = Array.isArray(litters)
-            ? litters.map(x => String(x).trim()).filter(Boolean)
-            : [];
-
-        const processedKg = Array.isArray(kg)
-            ? kg.map(x => String(x).trim()).filter(Boolean)
-            : [];
-
         const processedMrp = Number(mrp);
 
         if (isNaN(processedMrp) || processedMrp <= 0) {
@@ -124,7 +108,7 @@ exports.productcreate = async (req, res) => {
 
         const product = await Product.create({
             name: String(name).trim(),
-            brand: brand ? String(brand).trim() : "",
+           
 
             description: description
                 ? String(description).trim()
@@ -133,10 +117,6 @@ exports.productcreate = async (req, res) => {
             stock: 0,
             reservedStock: 0,
 
-
-            flavor: processedFlavors,
-            litters: processedLitters,
-            kg: processedKg,
             mrp: processedMrp,
 
             costPrice: processedCostPrice,
@@ -144,7 +124,6 @@ exports.productcreate = async (req, res) => {
 
             categoryId,
             categoryName: cat.name || "",
-
 
             hsnCode: String(hsnCode).trim(),
             gstRate: processedGstRate,
@@ -181,9 +160,6 @@ exports.productcreate = async (req, res) => {
                 costPrice: processedCostPrice,
                 sellingPrice: processedSellingPrice,
                 gstRate: processedGstRate,
-
-                flavor: processedFlavors[0] || "",
-                litters: processedLitters[0] || "",
 
                 isSold: false,
 
@@ -536,6 +512,7 @@ exports.bulkProductCreate = async (req, res) => {
         });
     }
 };
+
 
 exports.getproductMrps = async (req, res) => {
     try {

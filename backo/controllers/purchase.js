@@ -131,7 +131,10 @@ exports.createPurchase = async (req, res) => {
             }
 
             const gstpercentage = Number(product.gstRate || 0);
-            const gst = round2((qty * costPrice * gstpercentage) / 100);
+
+            const totalCostWithGST = round2(qty * costPrice);
+            const taxableAmount = round2(totalCostWithGST / (1 + gstpercentage / 100));
+            const gst = round2(totalCostWithGST - taxableAmount);
 
 
             const productMrp = Number(product.mrp || 0);
@@ -240,7 +243,7 @@ exports.createPurchase = async (req, res) => {
             );
 
 
-            totalAmount = round2(totalAmount + (qty * costPrice) + gst);
+            totalAmount = round2(totalAmount + totalCostWithGST);
 
             processedItems.push({
                 productId: product._id,
@@ -252,8 +255,11 @@ exports.createPurchase = async (req, res) => {
 
                 hsnId: product.hsnId || null,
                 hsnCode: product.hsnCode || "",
+                
                 gstpercentage,
                 gst,
+                taxableAmount,
+                totalCostWithGST,
 
                 categoryId: product.categoryId?._id,
                 categoryName: product.categoryId?.name || "",

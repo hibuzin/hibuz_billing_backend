@@ -64,25 +64,12 @@ const purchaseSchema = new mongoose.Schema({
                 default: ""
             },
 
-            brand: {
-                type: String,
-                default: ""
-            },
-
             description: {
                 type: String,
                 default: ""
             },
 
-            flavor: {
-                type: String,
-                default: ""
-            },
-
-            litters: {
-                type: String,
-                default: ""
-            },
+           
 
             qty: {
                 type: Number,

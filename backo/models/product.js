@@ -5,12 +5,6 @@ const productSchema = new mongoose.Schema({
 
     name: { type: String, required: true },
 
-    brand: {
-        type: String,
-        default: "",
-        trim: true
-    },
-
     description: {
         type: String,
         default: "",
@@ -26,23 +20,6 @@ const productSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
-
-
-    flavor: [{
-        type: String,
-        trim: true
-    }],
-
-    litters: [{
-        type: String,
-        trim: true
-    }],
-
-    kg: [
-        {
-            type: String
-        }
-    ],
 
     mrp: {
         type: Number
