@@ -627,8 +627,6 @@ exports.createBill = async (req, res) => {
 };
 
 
-
-
 exports.searchProductsForBill = async (req, res) => {
     try {
         const { search } = req.query;

@@ -1,4 +1,5 @@
-const ProductPriceHistory = require("../models/productPriceHistory");
+const ProductPriceHistory = require("../models/product_price_history");
+const { attachHierarchy } = require("../utils/hierarchy");
 const mongoose = require("mongoose");
 
 exports.getProductPriceHistory = async (req, res) => {

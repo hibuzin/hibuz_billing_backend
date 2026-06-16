@@ -56,7 +56,7 @@ router.get("/cashier/:id",
 
 
 router.put(
-    "/:adminId",
+    "/:admin/:adminId",
     verifyToken,
     authorize("super_admin"),
     updateAdmin

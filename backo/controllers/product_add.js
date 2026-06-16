@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Product = require("../models/product");
+const ProductPriceHistory = require("../models/product_price_history");
 const Barcode = require("../models/barcode");
 const PriceLevel = require("../models/price_level");
 const { attachHierarchy } = require("../utils/hierarchy");
@@ -108,7 +109,7 @@ exports.productcreate = async (req, res) => {
 
         const product = await Product.create({
             name: String(name).trim(),
-           
+
 
             description: description
                 ? String(description).trim()
@@ -127,6 +128,25 @@ exports.productcreate = async (req, res) => {
 
             hsnCode: String(hsnCode).trim(),
             gstRate: processedGstRate,
+
+            ...hierarchy,
+            createdBy: req.user.userId
+        });
+
+        await ProductPriceHistory.create({
+            productId: product._id,
+            barcode: barcode ? String(barcode).trim() : "",
+
+            oldMrp: 0,
+            newMrp: processedMrp,
+
+            oldCostPrice: 0,
+            newCostPrice: processedCostPrice,
+
+            oldSellingPrice: 0,
+            newSellingPrice: processedSellingPrice,
+
+            source: "product_create",
 
             ...hierarchy,
             createdBy: req.user.userId
@@ -641,7 +661,7 @@ exports.searchProducts = async (req, res) => {
         const data = products.map((product) => ({
             productId: product._id,
             productName: product.name || "",
-            
+
 
             stock: Number(product.stock || 0),
             reservedStock: Number(product.reservedStock || 0),

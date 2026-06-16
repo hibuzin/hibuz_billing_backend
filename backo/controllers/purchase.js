@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 
 const Purchase = require("../models/purchase");
 const Product = require("../models/product");
+const ProductPriceHistory = require("../models/product_price_history");
 const Supplier = require("../models/supplier");
 const Barcode = require("../models/barcode");
 const Counter = require("../models/counter");
@@ -138,8 +139,7 @@ exports.createPurchase = async (req, res) => {
 
 
             const productMrp = Number(product.mrp || 0);
-            const productFlavors = Array.isArray(product.flavor) ? product.flavor : [];
-            const productLitters = Array.isArray(product.litters) ? product.litters : [];
+
 
             if (mrp !== productMrp) {
                 return res.status(400).json({
@@ -148,17 +148,13 @@ exports.createPurchase = async (req, res) => {
                 });
             }
 
-            if (flavor && !productFlavors.includes(flavor)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Selected flavor not found in product"
-                });
-            }
 
-            if (litters && !productLitters.includes(litters)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Selected litters not found in product"
+            let oldBarcode = null;
+
+            if (barcode) {
+                oldBarcode = await Barcode.findOne({
+                    code: barcode,
+                    superAdminId: hierarchy.superAdminId
                 });
             }
 
@@ -197,6 +193,26 @@ exports.createPurchase = async (req, res) => {
                     }
                 );
             }
+
+            await ProductPriceHistory.create({
+                productId: product._id,
+                barcode,
+
+                oldMrp: oldBarcode?.mrp || product.mrp || 0,
+                newMrp: mrp,
+
+                oldCostPrice: oldBarcode?.costPrice || product.costPrice || 0,
+                newCostPrice: costPrice,
+
+                oldSellingPrice: oldBarcode?.sellingPrice || product.sellingPrice || 0,
+                newSellingPrice: sellingPrice,
+
+                source: "purchase",
+                invoiceNo,
+
+                ...hierarchy,
+                createdBy: req.user.userId
+            });
 
             if (priceLevel) {
                 await PriceLevel.findOneAndUpdate(
@@ -255,7 +271,7 @@ exports.createPurchase = async (req, res) => {
 
                 hsnId: product.hsnId || null,
                 hsnCode: product.hsnCode || "",
-                
+
                 gstpercentage,
                 gst,
                 taxableAmount,
