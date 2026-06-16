@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Customer = require("../models/customer");
 const user = require("../models/user");
+const Bill = require("../models/bill");
 const Counter = require("../models/counter");
 const { attachHierarchy } = require("../utils/hierarchy");
 

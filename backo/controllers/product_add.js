@@ -641,7 +641,7 @@ exports.searchProducts = async (req, res) => {
         const data = products.map((product) => ({
             productId: product._id,
             productName: product.name || "",
-            brand: product.brand || "",
+            
 
             stock: Number(product.stock || 0),
             reservedStock: Number(product.reservedStock || 0),
@@ -652,9 +652,9 @@ exports.searchProducts = async (req, res) => {
             hsnCode: product.hsnCode || product.categoryId?.hsnCode || "",
             gstRate: Number(product.gstRate || product.categoryId?.gstRate || 0),
 
-            flavor: product.flavor || [],
-            litters: product.litters || [],
-            kg: product.kg || [],
+            costPrice: Number(product.costPrice || 0),
+            sellingPrice: Number(product.sellingPrice || 0),
+
             mrps: product.mrps || [],
 
             status:
@@ -829,14 +829,10 @@ exports.updateProduct = async (req, res) => {
 
         const {
             name,
-            brand,
             description,
             categoryId,
             hsnCode,
             gstRate,
-            flavor,
-            litters,
-            kg,
             mrp,
             costPrice,
             sellingPrice
@@ -882,8 +878,6 @@ exports.updateProduct = async (req, res) => {
 
         if (name) product.name = String(name).trim();
 
-        if (brand !== undefined) product.brand = String(brand).trim();
-
         if (description !== undefined) {
             product.description = String(description).trim();
         }
@@ -910,18 +904,6 @@ exports.updateProduct = async (req, res) => {
             }
 
             product.gstRate = processedGstRate;
-        }
-
-        if (Array.isArray(flavor)) {
-            product.flavor = flavor.map(x => String(x).trim()).filter(Boolean);
-        }
-
-        if (Array.isArray(litters)) {
-            product.litters = litters.map(x => String(x).trim()).filter(Boolean);
-        }
-
-        if (Array.isArray(kg)) {
-            product.kg = kg.map(x => String(x).trim()).filter(Boolean);
         }
 
         if (mrp !== undefined) {

@@ -104,8 +104,6 @@ exports.createCustomer = async (req, res) => {
 }
 
 
-
-
 exports.getCustomerBalanceTotals = async (req, res) => {
     try {
         const hierarchy = attachHierarchy(req.user);
@@ -390,7 +388,7 @@ exports.getCustomerById = async (req, res) => {
 exports.updateCustomer = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, phone, email, address } = req.body;
+        const { name, phone, email, address, gstNumber } = req.body;
 
         const hierarchy = attachHierarchy(req.user);
 
@@ -417,6 +415,13 @@ exports.updateCustomer = async (req, res) => {
         if (phone) customer.phone = phone.trim();
         if (email) customer.email = email.toLowerCase();
         if (address !== undefined) customer.address = address;
+
+        if (gstNumber !== undefined) {
+            customer.gstNumber = gstNumber
+                ? gstNumber.trim().toUpperCase()
+                : "";
+        }
+
 
         customer.lastUpdatedBy = req.user.userId;
 
