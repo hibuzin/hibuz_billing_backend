@@ -81,8 +81,7 @@ exports.createPurchase = async (req, res) => {
         for (const item of items) {
             const productId = item.productId;
 
-            const flavor = item.flavor ? String(item.flavor).trim() : "";
-            const litters = item.litters ? String(item.litters).trim() : "";
+           
             const mrp = Number(item.mrp);
             const qty = Number(item.qty);
             const costPrice = Number(item.costPrice);
@@ -139,7 +138,7 @@ exports.createPurchase = async (req, res) => {
 
 
             const productMrp = Number(product.mrp || 0);
-
+           
 
             if (mrp !== productMrp) {
                 return res.status(400).json({
@@ -148,15 +147,7 @@ exports.createPurchase = async (req, res) => {
                 });
             }
 
-
-            let oldBarcode = null;
-
-            if (barcode) {
-                oldBarcode = await Barcode.findOne({
-                    code: barcode,
-                    superAdminId: hierarchy.superAdminId
-                });
-            }
+           
 
             if (barcode) {
                 await Barcode.findOneAndUpdate(
@@ -174,8 +165,7 @@ exports.createPurchase = async (req, res) => {
                             costPrice,
                             gstRate: gstpercentage,
 
-                            flavor,
-                            litters,
+                           
 
                             isSold: false,
 
@@ -193,26 +183,6 @@ exports.createPurchase = async (req, res) => {
                     }
                 );
             }
-
-            await ProductPriceHistory.create({
-                productId: product._id,
-                barcode,
-
-                oldMrp: oldBarcode?.mrp || product.mrp || 0,
-                newMrp: mrp,
-
-                oldCostPrice: oldBarcode?.costPrice || product.costPrice || 0,
-                newCostPrice: costPrice,
-
-                oldSellingPrice: oldBarcode?.sellingPrice || product.sellingPrice || 0,
-                newSellingPrice: sellingPrice,
-
-                source: "purchase",
-                invoiceNo,
-
-                ...hierarchy,
-                createdBy: req.user.userId
-            });
 
             if (priceLevel) {
                 await PriceLevel.findOneAndUpdate(
@@ -271,7 +241,7 @@ exports.createPurchase = async (req, res) => {
 
                 hsnId: product.hsnId || null,
                 hsnCode: product.hsnCode || "",
-
+                
                 gstpercentage,
                 gst,
                 taxableAmount,
@@ -281,8 +251,7 @@ exports.createPurchase = async (req, res) => {
                 categoryName: product.categoryId?.name || "",
                 brand: product.brand || "",
 
-                flavor,
-                litters,
+                
                 qty,
                 costPrice,
                 mrp,
@@ -396,11 +365,7 @@ exports.createPurchase = async (req, res) => {
                     categoryName:
                         item.categoryName || "",
 
-                    flavor:
-                        item.flavor || "",
-
-                    litters:
-                        item.litters || "",
+            
 
                     qty:
                         item.qty || 0,
@@ -480,8 +445,7 @@ exports.getProductForPurchase = async (req, res) => {
                 mrp: product.mrp,
                 costPrice: product.costPrice,
                 sellingPrice: product.sellingPrice,
-                flavor: product.flavor,
-                litters: product.litters,
+               
                 kg: product.kg,
                 currentStock: product.stock
             }
@@ -702,8 +666,7 @@ exports.getPurchases = async (req, res) => {
                 gstpercentage: item.gstpercentage || 0,
                 categoryName: item.categoryName || "",
 
-                flavor: item.flavor || "",
-                litters: item.litters || "",
+                
 
                 qty: item.qty || 0,
                 costPrice: item.costPrice || 0,
@@ -819,8 +782,7 @@ exports.getPurchaseById = async (req, res) => {
                     gstpercentage: item.gstpercentage || 0,
                     categoryName: item.categoryName || "",
 
-                    flavor: item.flavor || "",
-                    litters: item.litters || "",
+              
                     qty: item.qty || 0,
                     costPrice: item.costPrice || 0,
                     mrp: item.mrp || 0,
@@ -1027,12 +989,7 @@ exports.updatePurchase = async (req, res) => {
                 description:
                     product.description || "",
 
-                flavor:
-                    item.flavor || "",
-
-                litters:
-                    item.litters || "",
-
+             
                 qty,
                 costPrice,
                 mrp,

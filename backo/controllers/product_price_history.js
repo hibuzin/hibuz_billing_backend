@@ -1,66 +1,66 @@
 const ProductPriceHistory = require("../models/product_price_history");
 const { attachHierarchy } = require("../utils/hierarchy");
+const product = require("../models/product");
+const Purchase = require("../models/purchase");
 const mongoose = require("mongoose");
 
-exports.getProductPriceHistory = async (req, res) => {
-    try {
-        const { productId } = req.params;
-        const { fromDate, toDate, barcode } = req.query;
 
+
+
+
+exports.getAllPurchaseProductHistory = async (req, res) => {
+    try {
         const hierarchy = attachHierarchy(req.user);
 
-        if (!mongoose.Types.ObjectId.isValid(productId)) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid product id"
-            });
-        }
+        const history = await Purchase.aggregate([
+            {
+                $match: {
+                    superAdminId: new mongoose.Types.ObjectId(hierarchy.superAdminId)
+                }
+            },
+            { $unwind: "$items" },
+            {
+                $sort: {
+                    createdAt: -1
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    purchaseId: "$_id",
+                    invoiceNo: 1,
+                    invoiceDate: 1,
+                    supplierName: 1,
 
-        const match = {
-            productId: new mongoose.Types.ObjectId(productId),
-            superAdminId: hierarchy.superAdminId
-        };
+                    productId: "$items.productId",
+                    productName: "$items.productName",
+                    barcode: "$items.barcode",
 
-        if (barcode) {
-            match.barcode = String(barcode).trim();
-        }
+                    qty: "$items.qty",
+                    mrp: "$items.mrp",
+                    costPrice: "$items.costPrice",
+                    sellingPrice: "$items.sellingPrice",
 
-        if (fromDate && toDate) {
-            match.createdAt = {
-                $gte: new Date(fromDate),
-                $lte: new Date(toDate)
-            };
-        }
+                    gstpercentage: "$items.gstpercentage",
+                    gst: "$items.gst",
+                    totalCostWithGST: "$items.totalCostWithGST",
 
-        const history = await ProductPriceHistory.find(match)
-            .populate("createdBy", "name email CompanyName CompanyEmail")
-            .populate("purchaseId", "invoiceNo invoiceDate")
-            .sort({ createdAt: -1 });
+                    createdAt: 1
+                }
+            }
+        ]);
+
+        const formattedHistory = history.map((item) => ({
+            ...item,
+            purchaseDate: item.invoiceDate
+                ? new Date(item.invoiceDate).toLocaleDateString("en-GB").replace(/\//g, "-")
+                : ""
+        }));
 
         return res.status(200).json({
             success: true,
-            count: history.length,
-            data: history.map((item) => ({
-                _id: item._id,
-                productId: item.productId,
-                barcode: item.barcode,
-
-                oldMrp: item.oldMrp,
-                newMrp: item.newMrp,
-
-                oldCostPrice: item.oldCostPrice,
-                newCostPrice: item.newCostPrice,
-
-                oldSellingPrice: item.oldSellingPrice,
-                newSellingPrice: item.newSellingPrice,
-
-                source: item.source,
-                invoiceNo: item.invoiceNo,
-                purchaseId: item.purchaseId?._id || null,
-
-                changedBy: item.createdBy || null,
-                createdAt: item.createdAt
-            }))
+            count: formattedHistory.length,
+            data: formattedHistory
         });
 
     } catch (err) {
@@ -71,3 +71,83 @@ exports.getProductPriceHistory = async (req, res) => {
         });
     }
 };
+
+
+exports.getPurchasePriceHistoryByProduct = async (req, res) => {
+    try {
+        const { productId } = req.params;
+        const hierarchy = attachHierarchy(req.user);
+
+        if (!mongoose.Types.ObjectId.isValid(productId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid product id"
+            });
+        }
+
+        const history = await Purchase.aggregate([
+            {
+                $match: {
+                    superAdminId: new mongoose.Types.ObjectId(hierarchy.superAdminId)
+                }
+            },
+            { $unwind: "$items" },
+            {
+                $match: {
+                    "items.productId": new mongoose.Types.ObjectId(productId)
+                }
+            },
+            {
+                $sort: {
+                    invoiceDate: -1,
+                    createdAt: -1
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    purchaseId: "$_id",
+                    invoiceNo: 1,
+                    invoiceDate: 1,
+                    supplierName: 1,
+
+                    productId: "$items.productId",
+                    productName: "$items.productName",
+                    barcode: "$items.barcode",
+
+                    qty: "$items.qty",
+                    mrp: "$items.mrp",
+                    costPrice: "$items.costPrice",
+                    sellingPrice: "$items.sellingPrice",
+
+                    gstpercentage: "$items.gstpercentage",
+                    gst: "$items.gst",
+                    totalCostWithGST: "$items.totalCostWithGST",
+
+                    createdAt: 1
+                }
+            }
+        ]);
+
+         const formattedHistory = history.map((item) => ({
+            ...item,
+            purchaseDate: item.invoiceDate
+                ? new Date(item.invoiceDate).toLocaleDateString("en-GB").replace(/\//g, "-")
+                : ""
+        }));
+
+        return res.status(200).json({
+            success: true,
+            count: formattedHistory.length,
+            data: formattedHistory
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+};
+

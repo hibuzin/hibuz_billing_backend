@@ -1,6 +1,5 @@
 const mongoose = require("mongoose");
 const Product = require("../models/product");
-const ProductPriceHistory = require("../models/product_price_history");
 const Barcode = require("../models/barcode");
 const PriceLevel = require("../models/price_level");
 const { attachHierarchy } = require("../utils/hierarchy");
@@ -109,7 +108,7 @@ exports.productcreate = async (req, res) => {
 
         const product = await Product.create({
             name: String(name).trim(),
-
+           
 
             description: description
                 ? String(description).trim()
@@ -133,24 +132,7 @@ exports.productcreate = async (req, res) => {
             createdBy: req.user.userId
         });
 
-        await ProductPriceHistory.create({
-            productId: product._id,
-            barcode: barcode ? String(barcode).trim() : "",
-
-            oldMrp: 0,
-            newMrp: processedMrp,
-
-            oldCostPrice: 0,
-            newCostPrice: processedCostPrice,
-
-            oldSellingPrice: 0,
-            newSellingPrice: processedSellingPrice,
-
-            source: "product_create",
-
-            ...hierarchy,
-            createdBy: req.user.userId
-        });
+        
 
         let createdBarcode = null;
 
@@ -280,17 +262,8 @@ exports.bulkProductCreate = async (req, res) => {
                 const processedCostPrice = Number(item.costPrice);
                 const processedSellingPrice = Number(item.sellingPrice);
 
-                const processedFlavors = Array.isArray(item.flavor)
-                    ? item.flavor.map(x => String(x).trim()).filter(Boolean)
-                    : [];
 
-                const processedLitters = Array.isArray(item.litters)
-                    ? item.litters.map(x => String(x).trim()).filter(Boolean)
-                    : [];
-
-                const processedKg = Array.isArray(item.kg)
-                    ? item.kg.map(x => String(x).trim()).filter(Boolean)
-                    : [];
+               
 
                 if (!name || !categoryId) {
                     errors.push({
@@ -424,9 +397,7 @@ exports.bulkProductCreate = async (req, res) => {
                     stock: 0,
                     reservedStock: 0,
 
-                    flavor: processedFlavors,
-                    litters: processedLitters,
-                    kg: processedKg,
+                    
 
                     mrp: processedMrp,
                     costPrice: processedCostPrice,
@@ -457,8 +428,7 @@ exports.bulkProductCreate = async (req, res) => {
                         sellingPrice: processedSellingPrice,
                         gstRate: processedGstRate,
 
-                        flavor: processedFlavors[0] || "",
-                        litters: processedLitters[0] || "",
+                       
 
                         isSold: false,
 
@@ -540,10 +510,7 @@ exports.getproductMrps = async (req, res) => {
 
         const hierarchy = attachHierarchy(req.user);
 
-        const product = await Product.findOne({
-            _id: productId,
-            superAdminId: hierarchy.superAdminId
-        }).select("name brand flavor litters variants");
+        
 
         if (!product) {
             return res.status(404).json({
@@ -557,8 +524,7 @@ exports.getproductMrps = async (req, res) => {
             productId: product._id,
             name: product.name,
             brand: product.brand,
-            flavor: product.flavor,
-            litters: product.litters,
+           
             mrps: product.variants.map(v => ({
                 variantId: v._id,
                 mrp: v.mrp
@@ -661,7 +627,7 @@ exports.searchProducts = async (req, res) => {
         const data = products.map((product) => ({
             productId: product._id,
             productName: product.name || "",
-
+            
 
             stock: Number(product.stock || 0),
             reservedStock: Number(product.reservedStock || 0),
@@ -756,9 +722,7 @@ exports.searchProductsByCategory = async (req, res) => {
             hsnCode: product.hsnCode || product.categoryId?.hsnCode || "",
             gstRate: Number(product.gstRate || product.categoryId?.gstRate || 0),
 
-            flavor: product.flavor || [],
-            litters: product.litters || [],
-            kg: product.kg || [],
+            
             mrps: product.mrps || [],
 
             status:

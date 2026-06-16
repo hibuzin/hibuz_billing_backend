@@ -13,38 +13,7 @@ const productPriceHistorySchema = new mongoose.Schema(
             default: ""
         },
 
-        oldMrp: {
-            type: Number,
-            default: 0
-        },
-        newMrp: {
-            type: Number,
-            default: 0
-        },
-
-        oldCostPrice: {
-            type: Number,
-            default: 0
-        },
-        newCostPrice: {
-            type: Number,
-            default: 0
-        },
-
-        oldSellingPrice: {
-            type: Number,
-            default: 0
-        },
-        newSellingPrice: {
-            type: Number,
-            default: 0
-        },
-
-        source: {
-            type: String,
-            enum: ["product_create", "purchase"],
-            default: "purchase"
-        },
+       
 
         purchaseId: {
             type: mongoose.Schema.Types.ObjectId,
