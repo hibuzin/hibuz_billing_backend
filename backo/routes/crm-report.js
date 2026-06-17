@@ -7,7 +7,10 @@ const authorize = require("../middleware/role");
 
 const {
     getCRMReport,
-    customerItemWiseReport
+    customerItemWiseReport,
+    productWiseCustomerReport,
+    customerPurchaseDetails
+
 } = require("../controllers/crm_report");
 
 
@@ -26,5 +29,11 @@ router.get(
     authorize("super_admin", "admin"),
     customerItemWiseReport
 );
+
+
+router.get("/report/product-wise-customer", verifyToken, authorize("super_admin", "admin"), productWiseCustomerReport);
+
+
+router.get("/report/customer-purchase-details", verifyToken, authorize("super_admin", "admin"), customerPurchaseDetails);
 
 module.exports = router;
