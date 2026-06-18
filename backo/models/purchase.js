@@ -49,10 +49,32 @@ const purchaseSchema = new mongoose.Schema({
                 default: ""
             },
 
-            gstpercentage: {
+
+            taxPercentage: {
                 type: Number,
                 default: 0
             },
+
+            taxAmount: {
+                type: Number,
+                default: 0
+            },
+
+            amount: {
+                type: Number,
+                default: 0
+            },
+
+            totalCostWithGST: {
+                type: Number,
+                default: 0
+            },
+
+            isGstIncluded: {
+                type: Boolean,
+                default: true
+            },
+
 
             categoryId: {
                 type: mongoose.Schema.Types.ObjectId,
@@ -69,7 +91,7 @@ const purchaseSchema = new mongoose.Schema({
                 default: ""
             },
 
-           
+
 
             qty: {
                 type: Number,
@@ -77,9 +99,55 @@ const purchaseSchema = new mongoose.Schema({
 
             },
 
-            costPrice: {
+            freeQty: {
+                type: Number,
+                default: 0
+            },
+
+            totalStockQty: {
+                type: Number,
+                default: 0
+            },
+
+            discountPercent: {
+                type: Number,
+                default: 0
+            },
+
+            discountAmount: {
+                type: Number,
+                default: 0
+            },
+
+            netcost: {
                 type: Number,
                 required: true
+            },
+
+            netAmount: {
+                type: Number,
+                default: 0
+            },
+
+            Rate: {
+                type: Number,
+                default: 0
+            },
+
+            profitAmount: {
+                type: Number,
+                default: 0
+            },
+
+
+            profitPercent: {
+                type: Number,
+                default: 0
+            },
+
+            roiPercent: {
+                type: Number,
+                default: 0
             },
 
             mrp: {
@@ -133,10 +201,7 @@ const purchaseSchema = new mongoose.Schema({
                     }
                 ]
             },
-            gst: {
-                type: Number,
-                default: 0
-            },
+
 
 
             barcode: {
