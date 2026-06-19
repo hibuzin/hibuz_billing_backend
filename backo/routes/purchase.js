@@ -7,6 +7,7 @@ const authorize = require("../middleware/role");
 
 const {
     createPurchase,
+    calculatePurchase,
     getProductForPurchase,
     getSupplierBalanceBills,
     quickSearchPurchases,
@@ -19,6 +20,13 @@ const {
     deletePurchase
 } = require("../controllers/purchase");
 
+
+router.post(
+    "/calculate",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    calculatePurchase
+);
 
 router.post(
     "/purchase",

@@ -849,6 +849,164 @@ exports.getPurchases = async (req, res) => {
     }
 };
 
+exports.calculatePurchase = async (req, res) => {
+    try {
+        const { items, paidAmount = 0, supplierBillAmount } = req.body;
+
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Items are required"
+            });
+        }
+
+        const round2 = (num) =>
+            Math.round((Number(num) + Number.EPSILON) * 100) / 100;
+
+        let totalAmount = 0;
+        let totalGrossAmount = 0;
+        let totalTaxAmount = 0;
+
+        const calculatedItems = items.map((item, index) => {
+            const qty = Number(item.qty);
+            const freeQty = Number(item.freeQty || 0);
+            const totalStockQty = qty + freeQty;
+
+            const netcost = Number(item.netcost || item.purchasePrice || item.netCost);
+            const mrp = Number(item.mrp);
+            const sellingPrice = Number(item.sellingPrice || mrp);
+            const taxPercentage = Number(item.gst || item.gstRate || item.taxPercentage || 0);
+
+            const discountPercent = Number(item.discountPercent || 0);
+            const discountAmountInput = Number(item.discountAmount || 0);
+            const isGstIncluded = item.isGstIncluded !== false;
+
+            if (isNaN(qty) || qty <= 0) {
+                throw new Error(`Invalid quantity at item ${index + 1}`);
+            }
+
+            if (isNaN(netcost) || netcost < 0) {
+                throw new Error(`Invalid purchase price at item ${index + 1}`);
+            }
+
+            if (isNaN(mrp) || mrp <= 0) {
+                throw new Error(`Invalid MRP at item ${index + 1}`);
+            }
+
+            const netAmount = round2(netcost * qty);
+            const grossAmount = round2(qty * netcost);
+
+            const percentDiscountAmount = round2(
+                grossAmount * discountPercent / 100
+            );
+
+            const discountAmount = round2(
+                percentDiscountAmount + discountAmountInput
+            );
+
+            const amountAfterDiscount = round2(grossAmount - discountAmount);
+
+            let amount = 0;
+            let taxAmount = 0;
+            let totalCostWithGST = 0;
+
+            if (isGstIncluded) {
+                totalCostWithGST = amountAfterDiscount;
+
+                taxAmount = round2(
+                    amountAfterDiscount * taxPercentage / 100
+                );
+
+                amount = round2(
+                    amountAfterDiscount - taxAmount
+                );
+            } else {
+                amount = amountAfterDiscount;
+
+                taxAmount = round2(
+                    amount * taxPercentage / 100
+                );
+
+                totalCostWithGST = round2(
+                    amount + taxAmount
+                );
+            }
+
+            totalGrossAmount = round2(totalGrossAmount + amount);
+            totalTaxAmount = round2(totalTaxAmount + taxAmount);
+            totalAmount = round2(totalAmount + totalCostWithGST);
+
+            const Rate = totalStockQty > 0
+                ? round2(amount / totalStockQty)
+                : 0;
+
+            const profitAmount = round2(sellingPrice - netcost);
+
+            const profitPercent = sellingPrice > 0
+                ? round2((profitAmount / sellingPrice) * 100)
+                : 0;
+
+            const roiPercent = netcost > 0
+                ? round2((profitAmount / netcost) * 100)
+                : 0;
+
+            return {
+                productName: item.productName || item.itemName || "",
+                qty,
+                freeQty,
+                totalStockQty,
+
+                discountPercent,
+                discountAmount,
+
+                amount,
+                totalCostWithGST,
+                isGstIncluded,
+
+                profitPercent,
+                roiPercent,
+
+                taxPercentage,
+                netcost,
+                netAmount,
+                Rate,
+                profitAmount,
+                mrp,
+                sellingPrice,
+                taxAmount,
+
+                barcode: item.barcode || "",
+                receivedQty: totalStockQty,
+                pendingQty: 0
+            };
+        });
+
+        const finalSupplierBillAmount = Number(supplierBillAmount || totalAmount);
+        const finalPaidAmount = Number(paidAmount || 0);
+        const balanceAmount = round2(finalSupplierBillAmount - finalPaidAmount);
+
+        return res.status(200).json({
+            success: true,
+            message: "Purchase calculation successful",
+            data: {
+                totalAmount: round2(totalAmount),
+                totalGrossAmount: round2(totalGrossAmount),
+                totalTaxAmount: round2(totalTaxAmount),
+                supplierBillAmount: round2(finalSupplierBillAmount),
+                paidAmount: round2(finalPaidAmount),
+                balanceAmount,
+                items: calculatedItems
+            }
+        });
+
+    } catch (err) {
+        return res.status(400).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
+
 exports.getPurchaseById = async (req, res) => {
     try {
         const hierarchy = attachHierarchy(req.user);
