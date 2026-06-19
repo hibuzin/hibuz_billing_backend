@@ -123,7 +123,7 @@ exports.calculatePurchase = async (req, res) => {
                 : 0;
 
             return {
-                
+
                 productId: item.productId || "",
 
                 productName:
@@ -395,6 +395,53 @@ exports.createPurchase = async (req, res) => {
             const roiPercent = netcost > 0
                 ? round2((profitAmount / netcost) * 100)
                 : 0;
+
+
+            if (barcode) {
+                const existingBarcode = await Barcode.findOne({
+                    code: barcode,
+                    superAdminId: hierarchy.superAdminId
+                });
+
+                if (
+                    existingBarcode &&
+                    String(existingBarcode.productId) !== String(product._id)
+                ) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Barcode already exists for another product"
+                    });
+                }
+
+                await Barcode.findOneAndUpdate(
+                    {
+                        code: barcode,
+                        superAdminId: hierarchy.superAdminId
+                    },
+                    {
+                        $set: {
+                            productId: product._id,
+                            code: barcode,
+                            mrp,
+                            sellingPrice,
+                            netcost,
+                            Rate,
+                            gstRate: taxPercentage,
+                            isSold: false,
+                            ...hierarchy,
+                            createdBy: req.user.userId
+                        },
+                        $inc: {
+                            qty: totalStockQty,
+                            availableQty: totalStockQty
+                        }
+                    },
+                    {
+                        upsert: true,
+                        returnDocument: "after"
+                    }
+                );
+            }
 
 
 

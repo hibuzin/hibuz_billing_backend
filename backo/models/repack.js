@@ -11,7 +11,6 @@ const repackSchema = new mongoose.Schema(
         },
         fromBarcode: String,
         fromQty: Number,
-        fromUnitKg: Number,
 
         outputs: [
             {
