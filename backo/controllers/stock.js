@@ -448,22 +448,29 @@ exports.getTopSellingProducts = async (req, res) => {
 exports.lowstockcheck = async (req, res) => {
     try {
         const hierarchy = attachHierarchy(req.user);
-        const limit = Number(req.query.limit || 10);
 
         const barcodes = await Barcode.find({
             superAdminId: hierarchy.superAdminId,
-            availableQty: { $gt: 0, $lte: limit }
+            availableQty: { $gt: 0 }
         })
             .populate(
                 "productId",
-                "name brand stock categoryId gstRate mrps flavor litters"
+                "name brand stock categoryId gstRate flavor litters lowStockQty"
             )
             .sort({ availableQty: 1 });
 
         let totalLowStockQty = 0;
 
-        const data = barcodes.map((barcode, index) => {
+        const filtered = barcodes.filter((barcode) => {
+            const currentQty = Number(barcode.availableQty || 0);
+            const lowStockQty = Number(barcode.productId?.lowStockQty || 10);
+
+            return currentQty <= lowStockQty;
+        });
+
+        const data = filtered.map((barcode, index) => {
             const qty = Number(barcode.availableQty || 0);
+            const lowStockQty = Number(barcode.productId?.lowStockQty || 10);
 
             totalLowStockQty += qty;
 
@@ -475,6 +482,7 @@ exports.lowstockcheck = async (req, res) => {
 
                 barcode: barcode.code || "",
                 currentStock: qty,
+                lowStockQty,
                 totalProductStock: Number(barcode.productId?.stock || 0),
 
                 mrp: barcode.mrp || 0,
@@ -496,13 +504,10 @@ exports.lowstockcheck = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            limit,
-
             summary: {
                 totalLowStockProducts: data.length,
                 totalLowStockQty
             },
-
             count: data.length,
             data
         });

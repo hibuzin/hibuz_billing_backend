@@ -22,6 +22,7 @@ const cashierRoutes = require("./routes/cashier");
 const adminRoutes = require("./routes/admin");
 const productsRoutes = require("./routes/products");
 const productaddRoutes = require("./routes/product_add")
+const repackRoutes = require("./routes/repack");
 const productPriceHistoryRoutes = require("./routes/product_price_history");
 const scanRoutes = require("./routes/scan");
 const billRoutes = require("./routes/bill");
@@ -66,6 +67,7 @@ app.use("/api/profile", superAdminProfileRoutes);
 app.use("/api/cashier", cashierRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/products", productsRoutes);
+app.use("/api/repack", repackRoutes);
 app.use("/api/productadd", productaddRoutes);
 app.use("/api/product-price-history", productPriceHistoryRoutes);
 app.use("/api/supplier", supplierRoutes);

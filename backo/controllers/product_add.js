@@ -21,7 +21,8 @@ exports.productcreate = async (req, res) => {
             costPrice,
             sellingPrice,
             barcode,
-            priceLevel
+            priceLevel,
+            lowStockQty
         } = req.body;
 
         if (!name || !categoryId) {
@@ -45,13 +46,6 @@ exports.productcreate = async (req, res) => {
             });
         }
 
-        if (!hsnCode) {
-            return res.status(400).json({
-                success: false,
-                message: "HSN code is required"
-            });
-        }
-
         const processedGstRate = Number(gstRate || 0);
 
         const allowedGstRates = [0, 5, 12, 18, 28];
@@ -66,55 +60,32 @@ exports.productcreate = async (req, res) => {
             });
         }
 
-        const processedMrp = Number(mrp);
+        const processedMrp = Number(mrp || 0);
 
-        if (isNaN(processedMrp) || processedMrp <= 0) {
+
+        const processedCostPrice = Number(costPrice || 0);
+        const processedSellingPrice = Number(sellingPrice || 0);
+
+        const processedLowStockQty = Number(lowStockQty || 10);
+
+        if (isNaN(processedLowStockQty) || processedLowStockQty < 0) {
             return res.status(400).json({
                 success: false,
-                message: "Valid MRP is required"
+                message: "Valid low stock qty is required"
             });
         }
 
-        const processedCostPrice = Number(costPrice);
-        const processedSellingPrice = Number(sellingPrice);
-
-        if (isNaN(processedCostPrice) || processedCostPrice < 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Valid cost price is required"
-            });
-        }
-
-        if (isNaN(processedSellingPrice) || processedSellingPrice < 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Valid selling price is required"
-            });
-        }
-
-        if (processedCostPrice > processedMrp) {
-            return res.status(400).json({
-                success: false,
-                message: "Cost price cannot be greater than MRP"
-            });
-        }
-
-        if (processedSellingPrice > processedMrp) {
-            return res.status(400).json({
-                success: false,
-                message: "Selling price cannot be greater than MRP"
-            });
-        }
 
         const product = await Product.create({
             name: String(name).trim(),
-           
+
 
             description: description
                 ? String(description).trim()
                 : "",
 
             stock: 0,
+            lowStockQty: processedLowStockQty,
             reservedStock: 0,
 
             mrp: processedMrp,
@@ -125,14 +96,14 @@ exports.productcreate = async (req, res) => {
             categoryId,
             categoryName: cat.name || "",
 
-            hsnCode: String(hsnCode).trim(),
+            hsnCode: hsnCode ? String(hsnCode).trim() : "",
             gstRate: processedGstRate,
 
             ...hierarchy,
             createdBy: req.user.userId
         });
 
-        
+
 
         let createdBarcode = null;
 
@@ -263,7 +234,7 @@ exports.bulkProductCreate = async (req, res) => {
                 const processedSellingPrice = Number(item.sellingPrice);
 
 
-               
+
 
                 if (!name || !categoryId) {
                     errors.push({
@@ -397,7 +368,7 @@ exports.bulkProductCreate = async (req, res) => {
                     stock: 0,
                     reservedStock: 0,
 
-                    
+
 
                     mrp: processedMrp,
                     costPrice: processedCostPrice,
@@ -428,7 +399,7 @@ exports.bulkProductCreate = async (req, res) => {
                         sellingPrice: processedSellingPrice,
                         gstRate: processedGstRate,
 
-                       
+
 
                         isSold: false,
 
@@ -510,7 +481,7 @@ exports.getproductMrps = async (req, res) => {
 
         const hierarchy = attachHierarchy(req.user);
 
-        
+
 
         if (!product) {
             return res.status(404).json({
@@ -524,7 +495,7 @@ exports.getproductMrps = async (req, res) => {
             productId: product._id,
             name: product.name,
             brand: product.brand,
-           
+
             mrps: product.variants.map(v => ({
                 variantId: v._id,
                 mrp: v.mrp
@@ -627,7 +598,7 @@ exports.searchProducts = async (req, res) => {
         const data = products.map((product) => ({
             productId: product._id,
             productName: product.name || "",
-            
+
 
             stock: Number(product.stock || 0),
             reservedStock: Number(product.reservedStock || 0),
@@ -722,7 +693,7 @@ exports.searchProductsByCategory = async (req, res) => {
             hsnCode: product.hsnCode || product.categoryId?.hsnCode || "",
             gstRate: Number(product.gstRate || product.categoryId?.gstRate || 0),
 
-            
+
             mrps: product.mrps || [],
 
             status:
