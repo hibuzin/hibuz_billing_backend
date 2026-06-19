@@ -14,11 +14,12 @@ exports.createRepack = async (req, res) => {
             fromProductId,
             fromBarcode,
             fromQty,
+            fromUnitKg,
             outputs,
             note
         } = req.body;
 
-        if (!fromProductId || !fromBarcode || !fromQty ) {
+        if (!fromProductId || !fromBarcode || !fromQty || !fromUnitKg) {
             return res.status(400).json({
                 success: false,
                 message: "From product, barcode, qty and unit kg are required"
@@ -34,7 +35,7 @@ exports.createRepack = async (req, res) => {
 
         const hierarchy = attachHierarchy(req.user);
 
-       
+        const inputKg = Number(fromQty) * Number(fromUnitKg);
 
         let outputKg = 0;
 
@@ -175,7 +176,7 @@ exports.createRepack = async (req, res) => {
                     fromProductId,
                     fromBarcode: String(fromBarcode).trim(),
                     fromQty: Number(fromQty),
-                    
+                    fromUnitKg: Number(fromUnitKg),
 
                     outputs: outputs.map((item) => ({
                         toProductId: item.toProductId,
