@@ -276,6 +276,48 @@ exports.suppliersearch = async (req, res) => {
     }
 }
 
+exports.getAllSupplierPurchases = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+
+        const purchases = await Purchase.find({
+            superAdminId: hierarchy.superAdminId
+        })
+            .populate("supplierId", "supplierName")
+            .sort({ createdAt: -1 });
+
+        const data = purchases.map(purchase => ({
+            purchaseId: purchase._id,
+            invoiceNo: purchase.invoiceNo,
+            invoiceDate: purchase.invoiceDate,
+            supplierName: purchase.supplierId?.supplierName || "",
+            totalAmount: purchase.totalAmount,
+            paidAmount: purchase.paidAmount,
+            balanceAmount: purchase.balanceAmount,
+
+            paymentMode:
+                purchase.paidAmount === 0
+                    ? "Unpaid"
+                    : purchase.balanceAmount > 0
+                        ? "Partial Paid"
+                        : "Paid"
+        }));
+
+        res.status(200).json({
+            success: true,
+            count: data.length,
+            data
+        });
+
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
 
 exports.supplierPurchases = async (req, res) => {
     try {

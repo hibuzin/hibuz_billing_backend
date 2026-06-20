@@ -24,7 +24,7 @@ const getNextCustomerId = async () => {
 
 exports.createCustomer = async (req, res) => {
     try {
-        const { name, phone, email, address, gstNumber } = req.body;
+        const { name, phone, email, address, gstNumber, bankDetails } = req.body;
         const { userId, role, superAdminId, adminId } = req.user;
 
         if (!name || !phone) {
@@ -81,6 +81,14 @@ exports.createCustomer = async (req, res) => {
             gstNumber: gstNumber
                 ? gstNumber.trim().toUpperCase()
                 : "",
+
+            bankDetails: {
+                accountHolderName: bankDetails?.accountHolderName || "",
+                bankName: bankDetails?.bankName || "",
+                accountNumber: bankDetails?.accountNumber || "",
+                ifscCode: bankDetails?.ifscCode || "",
+                branchName: bankDetails?.branchName || ""
+            },
 
             createdBy: userId,
             roleCreatedBy: role,
@@ -388,7 +396,7 @@ exports.getCustomerById = async (req, res) => {
 exports.updateCustomer = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, phone, email, address, gstNumber } = req.body;
+        const { name, phone, email, address, gstNumber, bankDetails } = req.body;
 
         const hierarchy = attachHierarchy(req.user);
 
@@ -420,6 +428,16 @@ exports.updateCustomer = async (req, res) => {
             customer.gstNumber = gstNumber
                 ? gstNumber.trim().toUpperCase()
                 : "";
+        }
+
+        if (bankDetails !== undefined) {
+            customer.bankDetails = {
+                accountHolderName: bankDetails?.accountHolderName || "",
+                bankName: bankDetails?.bankName || "",
+                accountNumber: bankDetails?.accountNumber || "",
+                ifscCode: bankDetails?.ifscCode || "",
+                branchName: bankDetails?.branchName || ""
+            };
         }
 
 

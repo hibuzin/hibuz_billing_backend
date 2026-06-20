@@ -26,6 +26,14 @@ const customerSchema = new mongoose.Schema(
             trim: true
         },
 
+        bankDetails: {
+            accountHolderName: { type: String, default: "" },
+            bankName: { type: String, default: "" },
+            accountNumber: { type: String, default: "" },
+            ifscCode: { type: String, default: "" },
+            branchName: { type: String, default: "" }
+        },
+
         email: {
             type: String,
             default: "",
