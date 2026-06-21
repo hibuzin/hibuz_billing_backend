@@ -9,9 +9,24 @@ const repackSchema = new mongoose.Schema(
             ref: "Product",
             required: true
         },
+
         fromBarcode: String,
-        fromQty: Number,
-        fromUnitKg: Number,
+
+        fromkg: {
+            type: Number,
+            required: true
+        },
+
+        fromUnit: {
+            type: String,
+            enum: ["pcs", "kg", "g"],
+            required: true
+        },
+
+        fromUnitValue: {
+            type: Number,
+            required: true
+        },
 
         outputs: [
             {
@@ -20,9 +35,24 @@ const repackSchema = new mongoose.Schema(
                     ref: "Product",
                     required: true
                 },
+
                 toBarcode: String,
-                toQty: Number,
-                toUnitKg: Number
+
+                toQty: {
+                    type: Number,
+                    required: true
+                },
+
+                toUnit: {
+                    type: String,
+                    enum: ["pcs", "kg", "g"],
+                    required: true
+                },
+
+                toUnitValue: {
+                    type: Number,
+                    required: true
+                }
             }
         ],
 

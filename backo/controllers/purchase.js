@@ -262,7 +262,7 @@ exports.createPurchase = async (req, res) => {
             const sellingPrice = Number(item.sellingPrice || mrp);
 
             const priceLevel = item.priceLevel || null;
-            const barcode = String(item.barcode || item.code || "").trim();
+            let barcode = String(item.barcode || item.code || "").trim();
 
             if (!productId) {
                 return res.status(400).json({
@@ -309,6 +309,17 @@ exports.createPurchase = async (req, res) => {
                     success: false,
                     message: "Product not found"
                 });
+            }
+
+            if (!barcode) {
+                const productBarcode = await Barcode.findOne({
+                    productId: product._id,
+                    superAdminId: hierarchy.superAdminId
+                }).sort({ createdAt: -1 });
+
+                if (productBarcode) {
+                    barcode = productBarcode.code;
+                }
             }
 
             const productMrp = Number(product.mrp || 0);
@@ -415,39 +426,7 @@ exports.createPurchase = async (req, res) => {
 
                 await Barcode.findOneAndUpdate(
                     {
-                        code: barcode,
-                        superAdminId: hierarchy.superAdminId
-                    },
-                    {
-                        $set: {
-                            productId: product._id,
-                            code: barcode,
-                            mrp,
-                            sellingPrice,
-                            netcost,
-                            Rate,
-                            gstRate: taxPercentage,
-                            isSold: false,
-                            ...hierarchy,
-                            createdBy: req.user.userId
-                        },
-                        $inc: {
-                            qty: totalStockQty,
-                            availableQty: totalStockQty
-                        }
-                    },
-                    {
-                        upsert: true,
-                        returnDocument: "after"
-                    }
-                );
-            }
-
-
-
-            if (barcode) {
-                await Barcode.findOneAndUpdate(
-                    {
+                        productId: product._id,
                         code: barcode,
                         superAdminId: hierarchy.superAdminId
                     },
@@ -456,13 +435,13 @@ exports.createPurchase = async (req, res) => {
                             productId: product._id,
                             code: barcode,
 
-                            mrp,
-                            sellingPrice,
-                            netcost,
-                            Rate,
-                            gstRate: taxPercentage,
+                            mrp: item.mrp || product.mrp || 0,
+                            costPrice: item.costPrice || product.costPrice || 0,
+                            sellingPrice: item.sellingPrice || product.sellingPrice || 0,
+                            gstRate: product.gstRate || 0,
 
-
+                            unit: product.unit || "pcs",
+                            unitValue: product.unitValue || 1,
 
                             isSold: false,
 
@@ -470,16 +449,20 @@ exports.createPurchase = async (req, res) => {
                             createdBy: req.user.userId
                         },
                         $inc: {
+
                             qty: totalStockQty,
                             availableQty: totalStockQty
+
                         }
                     },
                     {
                         upsert: true,
-                        returnDocument: "after"
+                        new: true
                     }
-                );
-            }
+
+                )
+            };
+
 
             if (priceLevel) {
                 await PriceLevel.findOneAndUpdate(
@@ -542,8 +525,6 @@ exports.createPurchase = async (req, res) => {
                 categoryId: product.categoryId?._id,
                 categoryName: product.categoryId?.name || "",
 
-
-
                 taxPercentage,
                 taxAmount,
 
@@ -556,16 +537,18 @@ exports.createPurchase = async (req, res) => {
                 freeQty,
                 totalStockQty,
 
-
-
                 qty,
                 netcost,
                 netAmount,
                 Rate,
                 mrp,
+                barcode,
+
+                unit: product.unit,
+                unitValue: product.unitValue,
+
                 sellingPrice,
                 priceLevel,
-                barcode,
 
 
                 profitAmount,
@@ -705,6 +688,9 @@ exports.createPurchase = async (req, res) => {
                     Rate:
                         round2(item.Rate || 0),
 
+                    unit: item.unit || "",
+                    unitValue: item.unitValue || 1,
+
                     profitAmount:
                         round2(item.profitAmount || 0),
 
@@ -764,6 +750,28 @@ exports.getProductForPurchase = async (req, res) => {
             return res.status(404).json({
                 success: false,
                 message: "Product not found"
+            });
+        }
+
+        let barcode = String(item.barcode || item.code || "").trim();
+
+        if (!barcode) {
+            const productBarcode = await Barcode.findOne({
+                productId: product._id,
+                superAdminId: hierarchy.superAdminId
+            }).sort({ createdAt: -1 });
+
+            if (productBarcode) {
+                barcode = productBarcode.code;
+            }
+        }
+
+        const productMrp = Number(product.mrp || 0);
+
+        if (mrp !== productMrp) {
+            return res.status(400).json({
+                success: false,
+                message: "Selected MRP not found in product"
             });
         }
 

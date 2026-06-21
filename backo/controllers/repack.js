@@ -4,6 +4,8 @@ const Barcode = require("../models/barcode");
 const Repack = require("../models/repack");
 const { attachHierarchy } = require("../utils/hierarchy");
 
+
+
 exports.createRepack = async (req, res) => {
     const session = await mongoose.startSession();
 
@@ -13,20 +15,26 @@ exports.createRepack = async (req, res) => {
         const {
             fromProductId,
             fromBarcode,
-            fromQty,
-            fromUnitKg,
+            fromkg,
+            fromGram,
             outputs,
             note
         } = req.body;
 
-        if (!fromProductId || !fromBarcode || !fromQty || !fromUnitKg) {
+        if (!fromProductId || !fromBarcode || (!fromkg && !fromGram)) {
+            await session.abortTransaction();
+            session.endSession();
+
             return res.status(400).json({
                 success: false,
-                message: "From product, barcode, qty and unit kg are required"
+                message: "From product, barcode and qty are required"
             });
         }
 
         if (!Array.isArray(outputs) || outputs.length === 0) {
+            await session.abortTransaction();
+            session.endSession();
+
             return res.status(400).json({
                 success: false,
                 message: "Outputs are required"
@@ -35,32 +43,31 @@ exports.createRepack = async (req, res) => {
 
         const hierarchy = attachHierarchy(req.user);
 
-        const inputKg = Number(fromQty) * Number(fromUnitKg);
-
-        let outputKg = 0;
-
-        for (const item of outputs) {
-            outputKg += Number(item.toQty) * Number(item.toUnitKg);
-        }
-
-        if (inputKg !== outputKg) {
-            return res.status(400).json({
-                success: false,
-                message: `Repack mismatch. Input ${inputKg}kg but output ${outputKg}kg`
-            });
-        }
-
         const fromProduct = await Product.findOne({
             _id: fromProductId,
             superAdminId: hierarchy.superAdminId
         }).session(session);
 
         if (!fromProduct) {
-            return res.status(404).json({
-                success: false,
-                message: "From product not found"
-            });
+            throw new Error("From product not found");
         }
+
+
+        const fromKgValue = fromGram
+            ? Number(fromGram) / 1000
+            : Number(fromkg);
+
+        const fromUnitValue = Number(fromProduct.unitValue || 1);
+
+        if (isNaN(fromKgValue) || fromKgValue <= 0) {
+            throw new Error("Valid fromkg or fromGram is required");
+        }
+
+        if (fromProduct.unit !== "kg") {
+            throw new Error("From product must be kg unit");
+        }
+
+        const deductQty = fromKgValue / fromUnitValue;
 
         const fromBarcodeData = await Barcode.findOne({
             productId: fromProductId,
@@ -69,25 +76,49 @@ exports.createRepack = async (req, res) => {
         }).session(session);
 
         if (!fromBarcodeData) {
-            return res.status(404).json({
-                success: false,
-                message: "From barcode not found"
+            throw new Error("From barcode not found");
+        }
+
+
+
+        if (fromProduct.stock < deductQty) {
+            throw new Error("Not enough product stock");
+        }
+
+        if (fromBarcodeData.availableQty < deductQty) {
+            throw new Error("Not enough barcode stock");
+        }
+
+        const finalOutputs = [];
+
+        for (const item of outputs) {
+            const toProduct = await Product.findOne({
+                _id: item.toProductId,
+                superAdminId: hierarchy.superAdminId
+            }).session(session);
+
+            if (!toProduct) {
+                throw new Error("Output product not found");
+            }
+
+            const toQty = Number(item.toQty);
+
+            if (isNaN(toQty) || toQty <= 0) {
+                throw new Error("Valid output qty is required");
+            }
+
+            if (!item.toBarcode) {
+                throw new Error("Output barcode is required");
+            }
+
+
+            finalOutputs.push({
+                ...item,
+                product: toProduct
             });
         }
 
-        if (fromProduct.stock < Number(fromQty)) {
-            return res.status(400).json({
-                success: false,
-                message: "Not enough product stock"
-            });
-        }
 
-        if (fromBarcodeData.availableQty < Number(fromQty)) {
-            return res.status(400).json({
-                success: false,
-                message: "Not enough barcode stock"
-            });
-        }
 
         await Product.updateOne(
             {
@@ -95,7 +126,7 @@ exports.createRepack = async (req, res) => {
                 superAdminId: hierarchy.superAdminId
             },
             {
-                $inc: { stock: -Number(fromQty) }
+                $inc: { stock: -deductQty }
             },
             { session }
         );
@@ -107,21 +138,14 @@ exports.createRepack = async (req, res) => {
             },
             {
                 $inc: {
-                    availableQty: -Number(fromQty)
+                    availableQty: -deductQty
                 }
             },
             { session }
         );
 
-        for (const item of outputs) {
-            const toProduct = await Product.findOne({
-                _id: item.toProductId,
-                superAdminId: hierarchy.superAdminId
-            }).session(session);
-
-            if (!toProduct) {
-                throw new Error("Output product not found");
-            }
+        for (const item of finalOutputs) {
+            const toProduct = item.product;
 
             await Product.updateOne(
                 {
@@ -150,6 +174,9 @@ exports.createRepack = async (req, res) => {
                         costPrice: toProduct.costPrice || 0,
                         gstRate: toProduct.gstRate || 0,
 
+                        unit: toProduct.unit,
+                        unitValue: toProduct.unitValue,
+
                         isSold: false,
 
                         ...hierarchy,
@@ -175,14 +202,18 @@ exports.createRepack = async (req, res) => {
 
                     fromProductId,
                     fromBarcode: String(fromBarcode).trim(),
-                    fromQty: Number(fromQty),
-                    fromUnitKg: Number(fromUnitKg),
+                    fromQty: deductQty,
+                    fromkg: fromKgValue,
+                    fromGram: fromGram ? Number(fromGram) : fromKgValue * 1000,
+                    fromUnit: fromProduct.unit,
+                    fromUnitValue: fromProduct.unitValue,
 
-                    outputs: outputs.map((item) => ({
+                    outputs: finalOutputs.map((item) => ({
                         toProductId: item.toProductId,
                         toBarcode: String(item.toBarcode).trim(),
                         toQty: Number(item.toQty),
-                        toUnitKg: Number(item.toUnitKg)
+                        toUnit: item.product.unit,
+                        toUnitValue: item.product.unitValue
                     })),
 
                     note: note || "",

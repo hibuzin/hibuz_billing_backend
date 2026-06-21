@@ -14,9 +14,18 @@ const billSchema = new mongoose.Schema({
             barcode: String,
 
             name: String,
-            brand: String,
-            flavor: String,
-            litters: String,
+            unit: {
+                type: String,
+                enum: ["pcs", "kg", "g"],
+                default: "pcs"
+            },
+            unitValue: {
+                type: Number,
+                default: 1
+            },
+            unitText: String,
+           
+            totalkg: String,
 
             mrp: Number,
 

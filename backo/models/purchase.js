@@ -91,12 +91,9 @@ const purchaseSchema = new mongoose.Schema({
                 default: ""
             },
 
-
-
             qty: {
                 type: Number,
                 required: true
-
             },
 
             freeQty: {
@@ -132,6 +129,16 @@ const purchaseSchema = new mongoose.Schema({
             Rate: {
                 type: Number,
                 default: 0
+            },
+
+            unit: {
+                type: String,
+                enum: ["pcs", "kg", "g"],
+                default: "pcs"
+            },
+            unitValue: {
+                type: Number,
+                default: 1
             },
 
             profitAmount: {

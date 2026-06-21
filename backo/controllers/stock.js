@@ -48,8 +48,7 @@ exports.allstockcheck = async (req, res) => {
                     costPrice: item.costPrice || 0,
                     sellingPrice: item.sellingPrice || 0,
 
-                    flavor: item.flavor || "",
-                    litters: item.litters || "",
+
                     kg: item.kg || "",
 
                     purchasedQty,
@@ -125,8 +124,7 @@ exports.getStockValue = async (req, res) => {
                         costPrice: Number(item.costPrice || 0),
                         sellingPrice: Number(item.sellingPrice || 0),
 
-                        flavor: item.flavor || "",
-                        litters: item.litters || "",
+
                         kg: item.kg || "",
 
                         costValue: 0,
@@ -210,8 +208,7 @@ exports.getproductsearchstock = async (req, res) => {
                         productName,
                         brand,
                         mrp: item.mrp,
-                        flavor: item.flavor || "",
-                        litters: item.litters || "",
+
 
                         currentStock: Number(item.productId?.stock || 0)
                     });
@@ -262,6 +259,8 @@ exports.productStockById = async (req, res) => {
             superAdminId: hierarchy.superAdminId,
             "items.productId": productId
         })
+
+
             .populate("items.productId", "name brand stock")
             .sort({ createdAt: -1 });
 
@@ -304,8 +303,20 @@ exports.productStockById = async (req, res) => {
                     costPrice,
                     sellingPrice,
 
-                    flavor: item.flavor || "",
-                    litters: item.litters || "",
+                    unit: item.unit || product.unit || "pcs",
+
+                    unitValue:
+                        item.unitValue ||
+                        product.unitValue ||
+                        1,
+
+                    unitText:
+                        `${item.unitValue || product.unitValue || 1} ${item.unit || product.unit || "pcs"}`,
+
+                   
+                    totalkg:
+                        `${Number(product.stock || 0) * Number(product.unitValue || 1)} ${product.unit || "pcs"}`,
+
                     kg: item.kg || "",
 
                     purchasedQty: qty,
@@ -326,9 +337,22 @@ exports.productStockById = async (req, res) => {
             success: true,
             product: {
                 productId: product._id,
+
                 productName: product.name,
+
+                displayName: `${product.unitValue || 1} ${product.unit || "pcs"} ${product.name}`,
+
                 brand: product.brand || "",
+
+                unit: product.unit || "pcs",
+                unitValue: product.unitValue || 1,
+
                 currentStock: Number(product.stock || 0),
+
+                
+
+                totalkg:
+                    `${Number(product.stock || 0) * Number(product.unitValue || 1)} ${product.unit || "pcs"}`,
                 status:
                     Number(product.stock || 0) <= 0
                         ? "Out Of Stock"

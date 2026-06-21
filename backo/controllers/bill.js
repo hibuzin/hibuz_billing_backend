@@ -74,9 +74,22 @@ exports.createBill = async (req, res) => {
 
             let barcode = await Barcode.findOne({
                 code: searchValue,
-                superAdminId: hierarchy.superAdminId,
-                availableQty: { $gte: qty }
+                superAdminId: hierarchy.superAdminId
             });
+
+            if (!barcode) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Barcode not found: ${searchValue}`
+                });
+            }
+
+            if (Number(barcode.availableQty || 0) < qty) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Stock not available for barcode ${searchValue}. Available: ${barcode.availableQty || 0}`
+                });
+            }
 
             let product = null;
 
@@ -87,7 +100,7 @@ exports.createBill = async (req, res) => {
                 });
             }
 
-            if (!barcode || !product) {
+            if (!product) {
                 return res.status(400).json({
                     success: false,
                     message: `Product not found for: ${searchValue}`
@@ -120,9 +133,11 @@ exports.createBill = async (req, res) => {
                 barcode: barcode.code,
                 productName: product.name || "",
                 name: product.name || "",
-                brand: product.brand || "",
-                flavor: barcode.flavor || "",
-                litters: barcode.litters || "",
+                unit: barcode.unit || product.unit || "pcs",
+                unitValue: barcode.unitValue || product.unitValue || 1,
+                unitText: `${barcode.unitValue || product.unitValue || 1} ${barcode.unit || product.unit || "pcs"}`,
+
+                totalkg: `${qty * Number(barcode.unitValue || product.unitValue || 1)} ${barcode.unit || product.unit || "pcs"}`,
                 qty,
                 mrp: barcode.mrp || 0,
                 sellingPrice: barcode.sellingPrice || 0,
@@ -181,18 +196,8 @@ exports.createBill = async (req, res) => {
 
             const barcode = await Barcode.findOne({
                 productId: product._id,
-                superAdminId: hierarchy.superAdminId,
-                availableQty: { $gte: qty }
+                superAdminId: hierarchy.superAdminId
             });
-
-            if (!barcode) {
-                return res.status(400).json({
-                    success: false,
-                    message: `${product.name} stock not available`
-                });
-
-            }
-
 
 
             const normalSellingPrice = Number(barcode.sellingPrice || 0);
@@ -310,9 +315,11 @@ exports.createBill = async (req, res) => {
 
                 productName: product.name || "",
                 name: product.name || "",
-                brand: product.brand || "",
-                flavor: barcode.flavor || "",
-                litters: barcode.litters || "",
+                unit: barcode.unit || product.unit || "pcs",
+                unitValue: barcode.unitValue || product.unitValue || 1,
+                unitText: `${barcode.unitValue || product.unitValue || 1} ${barcode.unit || product.unit || "pcs"}`,
+                totalUnitQty: qty * Number(barcode.unitValue || product.unitValue || 1),
+                totalUnitText: `${qty * Number(barcode.unitValue || product.unitValue || 1)} ${barcode.unit || product.unit || "pcs"}`,
 
                 qty,
                 mrp: barcode.mrp || 0,

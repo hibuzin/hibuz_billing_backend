@@ -39,16 +39,15 @@ const barcodeSchema = new mongoose.Schema({
         default: 0
     },
 
-    flavor: {
+    unit: {
         type: String,
-        default: ""
+        enum: ["pcs", "kg", "g"],
+        default: "pcs"
     },
-
-    litters: {
-        type: String,
-        default: ""
+    unitValue: {
+        type: Number,
+        default: 1
     },
-
     qty: {
         type: Number,
         default: 0
