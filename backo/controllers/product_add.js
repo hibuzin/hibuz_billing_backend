@@ -52,7 +52,7 @@ exports.productcreate = async (req, res) => {
 
         const allowedGstRates = [0, 5, 12, 18, 28];
 
-        const allowedUnits = ["pcs", "kg", "g"];
+        const allowedUnits = ["pcs", "kg"];
 
         const finalUnit = unit
             ? String(unit).trim().toLowerCase()
@@ -63,7 +63,7 @@ exports.productcreate = async (req, res) => {
         if (!allowedUnits.includes(finalUnit)) {
             return res.status(400).json({
                 success: false,
-                message: "Unit must be pcs, kg or g"
+                message: "Unit must be pcs or kg"
             });
         }
 

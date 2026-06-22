@@ -16,12 +16,11 @@ exports.createRepack = async (req, res) => {
             fromProductId,
             fromBarcode,
             fromkg,
-            fromGram,
             outputs,
             note
         } = req.body;
 
-        if (!fromProductId || !fromBarcode || (!fromkg && !fromGram)) {
+        if (!fromProductId || !fromBarcode || !fromkg) {
             await session.abortTransaction();
             session.endSession();
 
@@ -53,14 +52,12 @@ exports.createRepack = async (req, res) => {
         }
 
 
-        const fromKgValue = fromGram
-            ? Number(fromGram) / 1000
-            : Number(fromkg);
+        const fromKgValue = Number(fromkg);
 
         const fromUnitValue = Number(fromProduct.unitValue || 1);
 
         if (isNaN(fromKgValue) || fromKgValue <= 0) {
-            throw new Error("Valid fromkg or fromGram is required");
+            throw new Error("Valid fromkg is required");
         }
 
         if (fromProduct.unit !== "kg") {
@@ -204,7 +201,6 @@ exports.createRepack = async (req, res) => {
                     fromBarcode: String(fromBarcode).trim(),
                     fromQty: deductQty,
                     fromkg: fromKgValue,
-                    fromGram: fromGram ? Number(fromGram) : fromKgValue * 1000,
                     fromUnit: fromProduct.unit,
                     fromUnitValue: fromProduct.unitValue,
 
