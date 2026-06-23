@@ -395,9 +395,8 @@ exports.supplierPurchases = async (req, res) => {
                 mrp: item.mrp || 0,
                 sellingPrice: item.sellingPrice || 0,
                 gst: item.gst || 0,
-                gstpercentage: item.gstpercentage || 0,
-                flavor: item.flavor || "",
-                litters: item.litters || ""
+                gstpercentage: item.gstpercentage || 0
+               
             }))
         }));
 
@@ -410,8 +409,8 @@ exports.supplierPurchases = async (req, res) => {
                     items: purchase.items.filter((item) =>
                         item.productName.toLowerCase().includes(keyword) ||
                         item.brand.toLowerCase().includes(keyword) ||
-                        item.barcode.toLowerCase().includes(keyword) ||
-                        item.flavor.toLowerCase().includes(keyword)
+                        item.barcode.toLowerCase().includes(keyword)
+                       
                     )
                 }))
                 .filter((purchase) => purchase.items.length > 0);

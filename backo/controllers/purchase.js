@@ -1265,6 +1265,17 @@ exports.updateSupplierBill = async (req, res) => {
         purchase.paidAmount += payAmount;
         purchase.balanceAmount -= payAmount;
 
+        purchase.paidAmount = Number(purchase.paidAmount.toFixed(2));
+        purchase.balanceAmount = Number(purchase.balanceAmount.toFixed(2));
+
+        if (purchase.balanceAmount <= 0) {
+            purchase.paymentStatus = "paid";
+        } else if (purchase.paidAmount > 0) {
+            purchase.paymentStatus = "partial";
+        } else {
+            purchase.paymentStatus = "due";
+        }
+
         purchase.paymentHistory.push({
             amount: payAmount,
             note: note || "Supplier payment",
@@ -1281,6 +1292,7 @@ exports.updateSupplierBill = async (req, res) => {
                 supplierBillAmount: purchase.supplierBillAmount,
                 paidAmount: purchase.paidAmount,
                 balanceAmount: purchase.balanceAmount,
+                paymentStatus: purchase.paymentStatus,
                 paymentHistory: purchase.paymentHistory
             }
         });
