@@ -1234,8 +1234,6 @@ exports.updateSupplierBill = async (req, res) => {
 
         const payAmount = Number(amount);
 
-        const payAmount = Number(amount);
-
         const allowedPaymentTypes = ["cash", "upi", "card", "bank", "cheque"];
 
         const finalPaymentType = paymentType
@@ -1256,12 +1254,7 @@ exports.updateSupplierBill = async (req, res) => {
             });
         }
 
-        if (isNaN(payAmount) || payAmount <= 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Valid payment amount is required"
-            });
-        }
+       
 
         const hierarchy = attachHierarchy(req.user);
 
