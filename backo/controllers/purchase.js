@@ -311,6 +311,28 @@ exports.createPurchase = async (req, res) => {
                 });
             }
 
+            const purchaseUnit = item.unit
+                ? String(item.unit).trim().toLowerCase()
+                : product.unit || "pcs";
+
+            const purchaseUnitValue = item.unitValue
+                ? Number(item.unitValue)
+                : Number(product.unitValue || 1);
+
+            if (!["pcs", "kg"].includes(purchaseUnit)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Unit must be pcs or kg"
+                });
+            }
+
+            if (isNaN(purchaseUnitValue) || purchaseUnitValue <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid unitValue is required"
+                });
+            }
+
             if (!barcode) {
                 const productBarcode = await Barcode.findOne({
                     productId: product._id,
@@ -440,8 +462,8 @@ exports.createPurchase = async (req, res) => {
                             sellingPrice: item.sellingPrice || product.sellingPrice || 0,
                             gstRate: product.gstRate || 0,
 
-                            unit: product.unit || "pcs",
-                            unitValue: product.unitValue || 1,
+                            unit: purchaseUnit,
+                            unitValue: purchaseUnitValue,
 
                             isSold: false,
 
@@ -544,8 +566,8 @@ exports.createPurchase = async (req, res) => {
                 mrp,
                 barcode,
 
-                unit: product.unit,
-                unitValue: product.unitValue,
+                unit: purchaseUnit,
+                unitValue: purchaseUnitValue,
 
                 sellingPrice,
                 priceLevel,
@@ -1245,7 +1267,8 @@ exports.updateSupplierBill = async (req, res) => {
 
         purchase.paymentHistory.push({
             amount: payAmount,
-            note: note || "Supplier payment"
+            note: note || "Supplier payment",
+            paidDate: new Date()
         });
 
         await purchase.save();
@@ -1341,6 +1364,28 @@ exports.updatePurchase = async (req, res) => {
                 return res.status(404).json({
                     success: false,
                     message: "Product not found"
+                });
+            }
+
+            const purchaseUnit = item.unit
+                ? String(item.unit).trim().toLowerCase()
+                : product.unit || "pcs";
+
+            const purchaseUnitValue = item.unitValue
+                ? Number(item.unitValue)
+                : Number(product.unitValue || 1);
+
+            if (!["pcs", "kg"].includes(purchaseUnit)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Unit must be pcs or kg"
+                });
+            }
+
+            if (isNaN(purchaseUnitValue) || purchaseUnitValue <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid unitValue is required"
                 });
             }
 

@@ -133,8 +133,8 @@ const purchaseSchema = new mongoose.Schema({
 
             unit: {
                 type: String,
-                enum: ["pcs", "kg", "g"],
-                default: "pcs"
+                enum: ["pcs", "kg", "g"]
+                
             },
             unitValue: {
                 type: Number,

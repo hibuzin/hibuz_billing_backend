@@ -377,6 +377,14 @@ exports.supplierPurchases = async (req, res) => {
             balanceAmount: purchase.balanceAmount,
             paymentStatus: purchase.paymentStatus,
 
+            paymentHistory: (purchase.paymentHistory || []).map((pay) => ({
+                amount: pay.amount || 0,
+                note: pay.note || "",
+                paidDate: pay.paidDate
+                    ? new Date(pay.paidDate).toLocaleDateString("en-CA")
+                    : ""
+            })),
+
             items: purchase.items.map((item) => ({
                 productId: item.productId?._id,
                 productName: item.productId?.name || item.productName || "",

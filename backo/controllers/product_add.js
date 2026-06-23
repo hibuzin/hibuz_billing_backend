@@ -58,7 +58,10 @@ exports.productcreate = async (req, res) => {
             ? String(unit).trim().toLowerCase()
             : "pcs";
 
-        const finalUnitValue = Number(unitValue || 1);
+        const finalUnitValue =
+            unitValue !== undefined && unitValue !== null && unitValue !== ""
+                ? Number(unitValue)
+                : undefined;
 
         if (!allowedUnits.includes(finalUnit)) {
             return res.status(400).json({
@@ -67,7 +70,10 @@ exports.productcreate = async (req, res) => {
             });
         }
 
-        if (isNaN(finalUnitValue) || finalUnitValue <= 0) {
+        if (
+            finalUnitValue !== undefined &&
+            (isNaN(finalUnitValue) || finalUnitValue <= 0)
+        ) {
             return res.status(400).json({
                 success: false,
                 message: "Valid unitValue is required"
@@ -99,6 +105,24 @@ exports.productcreate = async (req, res) => {
             });
         }
 
+        let barcodeCode = "";
+
+        if (barcode) {
+            barcodeCode = String(barcode).trim();
+
+            const existingBarcode = await Barcode.findOne({
+                code: barcodeCode,
+                superAdminId: hierarchy.superAdminId
+            });
+
+            if (existingBarcode) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Barcode already exists"
+                });
+            }
+        }
+
 
         const product = await Product.create({
             name: String(name).trim(),
@@ -115,7 +139,7 @@ exports.productcreate = async (req, res) => {
             mrp: processedMrp,
 
             unit: finalUnit,
-            unitValue: finalUnitValue,
+            ...(finalUnitValue !== undefined && { unitValue: finalUnitValue }),
 
             costPrice: processedCostPrice,
             sellingPrice: processedSellingPrice,
@@ -137,17 +161,7 @@ exports.productcreate = async (req, res) => {
         if (barcode) {
             const barcodeCode = String(barcode).trim();
 
-            const existingBarcode = await Barcode.findOne({
-                code: barcodeCode,
-                superAdminId: hierarchy.superAdminId
-            });
 
-            if (existingBarcode) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Barcode already exists"
-                });
-            }
 
             createdBarcode = await Barcode.create({
                 productId: product._id,
@@ -159,7 +173,7 @@ exports.productcreate = async (req, res) => {
                 mrp: processedMrp,
 
                 unit: finalUnit,
-                unitValue: finalUnitValue,
+                ...(finalUnitValue !== undefined && { unitValue: finalUnitValue }),
 
                 costPrice: processedCostPrice,
                 sellingPrice: processedSellingPrice,
@@ -282,7 +296,10 @@ exports.bulkProductCreate = async (req, res) => {
                     continue;
                 }
 
-                if (isNaN(finalUnitValue) || finalUnitValue <= 0) {
+                if (
+                    finalUnitValue !== undefined &&
+                    (isNaN(finalUnitValue) || finalUnitValue <= 0)
+                ) {
                     errors.push({
                         row: i + 1,
                         name,
@@ -429,7 +446,7 @@ exports.bulkProductCreate = async (req, res) => {
                     mrp: processedMrp,
 
                     unit: finalUnit,
-                    unitValue: finalUnitValue,
+                    ...(finalUnitValue !== undefined && { unitValue: finalUnitValue }),
 
                     costPrice: processedCostPrice,
                     sellingPrice: processedSellingPrice,
@@ -457,7 +474,7 @@ exports.bulkProductCreate = async (req, res) => {
                         mrp: processedMrp,
 
                         unit: finalUnit,
-                        unitValue: finalUnitValue,
+                        ...(finalUnitValue !== undefined && { unitValue: finalUnitValue }),
 
                         costPrice: processedCostPrice,
                         sellingPrice: processedSellingPrice,
@@ -877,7 +894,8 @@ exports.updateProduct = async (req, res) => {
             unitValue,
             lowStockQty,
             costPrice,
-            sellingPrice
+            sellingPrice,
+            barcode
         } = req.body;
 
         if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -961,7 +979,7 @@ exports.updateProduct = async (req, res) => {
             product.mrp = processedMrp;
         }
 
-        const allowedUnits = ["pcs", "kg", "g"];
+        const allowedUnits = ["pcs", "kg"];
 
         if (unit !== undefined) {
             const finalUnit = String(unit).trim().toLowerCase();
@@ -969,7 +987,7 @@ exports.updateProduct = async (req, res) => {
             if (!allowedUnits.includes(finalUnit)) {
                 return res.status(400).json({
                     success: false,
-                    message: "Unit must be pcs, kg or g"
+                    message: "Unit must be pcs or kg "
                 });
             }
 
@@ -1052,6 +1070,54 @@ exports.updateProduct = async (req, res) => {
 
         product.updatedBy = req.user.userId || req.user.id;
 
+        let createdBarcode = null;
+
+        if (barcode !== undefined && barcode !== null && String(barcode).trim() !== "") {
+            const barcodeCode = String(barcode).trim();
+
+            const existingBarcode = await Barcode.findOne({
+                code: barcodeCode,
+                superAdminId: hierarchy.superAdminId
+            });
+
+            if (
+                existingBarcode &&
+                String(existingBarcode.productId) !== String(product._id)
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Barcode already exists for another product"
+                });
+            }
+
+            if (!existingBarcode) {
+                createdBarcode = await Barcode.create({
+                    productId: product._id,
+                    code: barcodeCode,
+
+                    qty: 0,
+                    availableQty: 0,
+
+                    mrp: product.mrp || 0,
+                    costPrice: product.costPrice || 0,
+                    sellingPrice: product.sellingPrice || 0,
+                    gstRate: product.gstRate || 0,
+
+                    unit: product.unit || "pcs",
+                    ...(product.unitValue !== undefined &&
+                        product.unitValue !== null &&
+                        product.unitValue !== "" && {
+                        unitValue: product.unitValue
+                    }),
+
+                    isSold: false,
+
+                    ...hierarchy,
+                    createdBy: req.user.userId
+                });
+            }
+        }
+
         await Barcode.updateMany(
             {
                 productId: product._id,
@@ -1074,7 +1140,10 @@ exports.updateProduct = async (req, res) => {
         return res.json({
             success: true,
             message: "Product updated successfully",
-            data: product
+            data: {
+                product,
+                barcode: createdBarcode
+            }
         });
 
     } catch (err) {

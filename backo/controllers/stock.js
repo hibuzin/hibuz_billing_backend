@@ -25,7 +25,10 @@ exports.allstockcheck = async (req, res) => {
                     superAdminId: hierarchy.superAdminId
                 }).select("code");
 
-                const currentStock = Number(item.productId?.stock || 0);
+                const currentStock = Number(
+                    Number(item.productId?.stock || 0).toFixed(2)
+                );
+                
                 const purchasedQty = Number(item.qty || 0);
                 const receivedQty = Number(item.receivedQty || 0);
                 const pendingQty = Number(item.pendingQty || 0);
@@ -40,7 +43,7 @@ exports.allstockcheck = async (req, res) => {
                     productName: item.productId?.name || "",
                     brand: item.productId?.brand || item.brand || "",
 
-                    barcode: barcode?.code || "",
+                    barcode: item.barcode || barcode?.code || "",
 
                     currentStock,
 
@@ -48,6 +51,22 @@ exports.allstockcheck = async (req, res) => {
                     costPrice: item.costPrice || 0,
                     sellingPrice: item.sellingPrice || 0,
 
+
+                    unit: item.unit || "pcs",
+
+                    unitValue: item.unitValue || "",
+
+                    displayName: item.unitValue
+                        ? `${item.unitValue} ${item.unit || "pcs"} ${item.productId?.name || ""}`
+                        : `${item.unit || "pcs"} ${item.productId?.name || ""}`,
+
+                    unitText: item.unitValue
+                        ? `${item.unitValue} ${item.unit || "pcs"}`
+                        : `${item.unit || "pcs"}`,
+
+                    totalkg: item.unitValue
+                        ? `${currentStock * Number(item.unitValue || 0)} ${item.unit || "pcs"}`
+                        : "",
 
                     kg: item.kg || "",
 
@@ -304,18 +323,19 @@ exports.productStockById = async (req, res) => {
                     sellingPrice,
 
                     unit: item.unit || product.unit || "pcs",
+                    displayName: item.unitValue
+                        ? `${item.unitValue} ${item.unit || product.unit || "pcs"} ${product.name}`
+                        : `${item.unit || product.unit || "pcs"} ${product.name}`,
 
-                    unitValue:
-                        item.unitValue ||
-                        product.unitValue ||
-                        1,
+                    unitValue: item.unitValue || "",
 
-                    unitText:
-                        `${item.unitValue || product.unitValue || 1} ${item.unit || product.unit || "pcs"}`,
+                    unitText: item.unitValue
+                        ? `${item.unitValue} ${item.unit || product.unit || "pcs"}`
+                        : `${item.unit || product.unit || "pcs"}`,
 
-                   
-                    totalkg:
-                        `${Number(product.stock || 0) * Number(product.unitValue || 1)} ${product.unit || "pcs"}`,
+                    totalkg: item.unitValue
+                        ? `${Number(product.stock || 0) * Number(item.unitValue || 0)} ${item.unit || product.unit || "pcs"}`
+                        : "",
 
                     kg: item.kg || "",
 
@@ -333,6 +353,8 @@ exports.productStockById = async (req, res) => {
             });
         });
 
+        const latestItem = data[0] || null;
+
         return res.status(200).json({
             success: true,
             product: {
@@ -340,19 +362,21 @@ exports.productStockById = async (req, res) => {
 
                 productName: product.name,
 
-                displayName: `${product.unitValue || 1} ${product.unit || "pcs"} ${product.name}`,
+                displayName: latestItem?.unitValue
+                    ? `${latestItem.unitValue} ${latestItem.unit || product.unit || "pcs"} ${product.name}`
+                    : `${product.unit || "pcs"} ${product.name}`,
 
                 brand: product.brand || "",
 
                 unit: product.unit || "pcs",
-                unitValue: product.unitValue || 1,
+                unitValue: latestItem?.unitValue || "",
 
                 currentStock: Number(product.stock || 0),
 
-                
+                totalkg: latestItem?.unitValue
+                    ? `${Number(product.stock || 0) * Number(latestItem.unitValue || 0)} ${latestItem.unit || product.unit || "pcs"}`
+                    : "",
 
-                totalkg:
-                    `${Number(product.stock || 0) * Number(product.unitValue || 1)} ${product.unit || "pcs"}`,
                 status:
                     Number(product.stock || 0) <= 0
                         ? "Out Of Stock"
