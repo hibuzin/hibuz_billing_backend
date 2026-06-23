@@ -379,6 +379,7 @@ exports.supplierPurchases = async (req, res) => {
 
             paymentHistory: (purchase.paymentHistory || []).map((pay) => ({
                 amount: pay.amount || 0,
+                paymentType: pay.paymentType || "cash",
                 note: pay.note || "",
                 paidDate: pay.paidDate
                     ? new Date(pay.paidDate).toLocaleDateString("en-CA")
@@ -396,7 +397,7 @@ exports.supplierPurchases = async (req, res) => {
                 sellingPrice: item.sellingPrice || 0,
                 gst: item.gst || 0,
                 gstpercentage: item.gstpercentage || 0
-               
+
             }))
         }));
 
@@ -410,7 +411,7 @@ exports.supplierPurchases = async (req, res) => {
                         item.productName.toLowerCase().includes(keyword) ||
                         item.brand.toLowerCase().includes(keyword) ||
                         item.barcode.toLowerCase().includes(keyword)
-                       
+
                     )
                 }))
                 .filter((purchase) => purchase.items.length > 0);

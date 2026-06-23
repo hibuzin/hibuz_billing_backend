@@ -1230,9 +1230,31 @@ exports.getPurchaseById = async (req, res) => {
 exports.updateSupplierBill = async (req, res) => {
     try {
         const { purchaseId } = req.params;
-        const { amount, note } = req.body;
+        const { amount, note, paymentType } = req.body;
 
         const payAmount = Number(amount);
+
+        const payAmount = Number(amount);
+
+        const allowedPaymentTypes = ["cash", "upi", "card", "bank", "cheque"];
+
+        const finalPaymentType = paymentType
+            ? String(paymentType).trim().toLowerCase()
+            : "cash";
+
+        if (!allowedPaymentTypes.includes(finalPaymentType)) {
+            return res.status(400).json({
+                success: false,
+                message: "Payment type must be cash, upi, card, bank or cheque"
+            });
+        }
+
+        if (isNaN(payAmount) || payAmount <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid payment amount is required"
+            });
+        }
 
         if (isNaN(payAmount) || payAmount <= 0) {
             return res.status(400).json({
@@ -1278,6 +1300,7 @@ exports.updateSupplierBill = async (req, res) => {
 
         purchase.paymentHistory.push({
             amount: payAmount,
+            paymentType: finalPaymentType,
             note: note || "Supplier payment",
             paidDate: new Date()
         });

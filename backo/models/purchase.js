@@ -134,7 +134,7 @@ const purchaseSchema = new mongoose.Schema({
             unit: {
                 type: String,
                 enum: ["pcs", "kg"]
-                
+
             },
             unitValue: {
                 type: Number,
@@ -244,6 +244,14 @@ const purchaseSchema = new mongoose.Schema({
     paymentHistory: [
         {
             amount: Number,
+
+            paymentType: {
+                type: String,
+                enum: ["cash", "upi", "card", "bank", "cheque"],
+                required: true,
+                default: "cash"
+            },
+
             paidDate: {
                 type: Date,
                 default: Date.now
