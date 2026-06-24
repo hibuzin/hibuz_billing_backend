@@ -45,6 +45,36 @@ exports.allstockcheck = async (req, res) => {
                     0
                 );
 
+                const formatStockQty = (value) => {
+                    const num = Number(value || 0);
+                    return Number.isInteger(num)
+                        ? String(num)
+                        : String(Number(num.toFixed(2)));
+                };
+
+                const stockUnit = item.unit || barcode?.unit || "pcs";
+                const stockUnitValue = Number(item.unitValue || barcode?.unitValue || 0);
+
+                let totalStockText = "";
+
+                if (stockUnit === "kg") {
+                    totalStockText = `${formatStockQty(
+                        currentStock * stockUnitValue
+                    )} kg`;
+                }
+
+                else if (stockUnit === "g") {
+
+                    const totalKg =
+                        (currentStock * stockUnitValue) / 1000;
+
+                    totalStockText = `${formatStockQty(totalKg)} kg`;
+                }
+
+                else {
+                    totalStockText = `${formatStockQty(currentStock)} pcs`;
+                }
+
                 data.push({
                     purchaseId: purchase._id,
                     invoiceNo: purchase.invoiceNo,
@@ -57,8 +87,7 @@ exports.allstockcheck = async (req, res) => {
                     barcode: item.barcode || barcode?.code || "",
 
                     currentStock,
-                    productStock,
-                    barcodeStock,
+                   
 
 
                     mrp: item.mrp || 0,
@@ -70,17 +99,13 @@ exports.allstockcheck = async (req, res) => {
 
                     unitValue: item.unitValue || "",
 
-                    displayName: item.unitValue
-                        ? `${item.unitValue} ${item.unit || "pcs"} ${item.productId?.name || ""}`
-                        : `${item.unit || "pcs"} ${item.productId?.name || ""}`,
+                    
 
                     unitText: item.unitValue
                         ? `${item.unitValue} ${item.unit || "pcs"}`
                         : `${item.unit || "pcs"}`,
 
-                    totalkg: item.unitValue
-                        ? `${currentStock * Number(item.unitValue || 0)} ${item.unit || "pcs"}`
-                        : "",
+                   
 
                     kg: item.kg || "",
 
@@ -379,9 +404,7 @@ exports.productStockById = async (req, res) => {
                     barcode: barcode?.code || item.barcode || "",
 
                     currentStock,
-                    productStock: Number(product.stock || 0),
-                    barcodeStock: Number(barcode?.availableQty || 0),
-                    barcodeQty: Number(barcode?.qty || 0),
+                   
 
                     mrp: item.mrp || 0,
                     costPrice,
@@ -398,9 +421,7 @@ exports.productStockById = async (req, res) => {
                         ? `${item.unitValue} ${item.unit || product.unit || "pcs"}`
                         : `${item.unit || product.unit || "pcs"}`,
 
-                    totalkg: item.unitValue
-                        ? `${currentStock * Number(item.unitValue || 0)} ${item.unit || product.unit || "pcs"}`
-                        : "",
+                  
 
                     kg: item.kg || "",
 

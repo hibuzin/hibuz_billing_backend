@@ -5,6 +5,21 @@ const Repack = require("../models/repack");
 const { attachHierarchy } = require("../utils/hierarchy");
 
 
+const convertToKg = (unit, unitValue, qty) => {
+    const finalUnit = String(unit || "").trim().toLowerCase();
+    const finalUnitValue = Number(unitValue || 1);
+    const finalQty = Number(qty || 0);
+
+    if (finalUnit === "kg") {
+        return finalQty * finalUnitValue;
+    }
+
+    if (finalUnit === "g" || finalUnit === "gram" || finalUnit === "grams") {
+        return (finalQty * finalUnitValue) / 1000;
+    }
+
+    throw new Error("Only kg and g units are allowed in repack");
+};
 
 exports.createRepack = async (req, res) => {
     const session = await mongoose.startSession();
@@ -60,11 +75,21 @@ exports.createRepack = async (req, res) => {
             throw new Error("Valid fromkg is required");
         }
 
-        if (fromProduct.unit !== "kg") {
-            throw new Error("From product must be kg unit");
+        const fromUnit = String(fromProduct.unit || "").trim().toLowerCase();
+
+        if (!["kg", "g", "gram", "grams"].includes(fromUnit)) {
+            throw new Error("From product must be kg or g unit");
         }
 
-        const deductQty = fromKgValue / fromUnitValue;
+        let deductQty = 0;
+
+        if (fromUnit === "kg") {
+            deductQty = fromKgValue / Number(fromProduct.unitValue || 1);
+        }
+
+        if (fromUnit === "g" || fromUnit === "gram" || fromUnit === "grams") {
+            deductQty = (fromKgValue * 1000) / Number(fromProduct.unitValue || 1);
+        }
 
         const fromBarcodeData = await Barcode.findOne({
             productId: fromProductId,
@@ -118,7 +143,11 @@ exports.createRepack = async (req, res) => {
         let totalOutputKg = 0;
 
         for (const item of finalOutputs) {
-            totalOutputKg += Number(item.toQty) * Number(item.product.unitValue || 1);
+            totalOutputKg += convertToKg(
+                item.product.unit,
+                item.product.unitValue,
+                item.toQty
+            );
         }
 
         if (totalOutputKg > fromKgValue) {
@@ -214,7 +243,7 @@ exports.createRepack = async (req, res) => {
                     fromQty: deductQty,
                     fromkg: fromKgValue,
                     fromUnit: fromProduct.unit,
-                    fromUnitValue: fromProduct.unitValue,
+                    fromUnitValue: fromUnitValue,
 
                     outputs: finalOutputs.map((item) => ({
                         toProductId: item.toProductId,
