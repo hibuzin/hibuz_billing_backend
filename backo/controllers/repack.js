@@ -115,6 +115,18 @@ exports.createRepack = async (req, res) => {
             });
         }
 
+        let totalOutputKg = 0;
+
+        for (const item of finalOutputs) {
+            totalOutputKg += Number(item.toQty) * Number(item.product.unitValue || 1);
+        }
+
+        if (totalOutputKg > fromKgValue) {
+            throw new Error(
+                `Output kg cannot be greater than input kg. Input: ${fromKgValue}kg, Output: ${totalOutputKg}kg`
+            );
+        }
+
 
 
         await Product.updateOne(

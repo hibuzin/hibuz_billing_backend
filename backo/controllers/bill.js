@@ -601,19 +601,52 @@ exports.createBill = async (req, res) => {
         }
 
 
+        const cgst = Number((totalGST / 2).toFixed(2));
+        const sgst = Number((totalGST / 2).toFixed(2));
+
         return res.status(201).json({
             success: true,
             message: "Bill generated successfully",
             data: {
                 billId: bill._id,
+
                 invoiceNo: bill.invoiceNo,
+
+                invoiceDate: new Date().toLocaleDateString("en-GB"),
+
+                invoiceTime: new Date().toLocaleTimeString("en-IN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit"
+                }),
+
+                customer: customer
+                    ? {
+                        customerId: customer.customerId,
+                        customerName: customer.name,
+                        mobile: customer.phone || ""
+                    }
+                    : null,
+
                 paymentMethod: bill.paymentMethod,
                 paymentStatus: bill.paymentStatus,
+
                 payments: finalPayments,
+
                 paidAmount: totalPaid,
                 pendingAmount,
+
                 items,
-                summary: bill.summary,
+
+                summary: {
+                    subTotal: Number(subTotal.toFixed(2)),
+                    cgst,
+                    sgst,
+                    totalGST: Number(totalGST.toFixed(2)),
+                    discount,
+                    grandTotal
+                },
+
                 loyalty: {
                     used: discount,
                     earned: earnedPoints,

@@ -15,14 +15,19 @@ const verifyToken = (req, res, next) => {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-         
+
         req.user = decoded;
-        req.token = token; 
+        req.token = token;
+
         next();
     } catch (err) {
-        return res.status(401).json({ message: "Invalid token" });
+        return res.status(401).json({
+            success: false,
+            message: "Invalid token"
+        });
     }
 };
+
 
 const blacklistToken = (token) => {
     tokenBlacklist.add(token);

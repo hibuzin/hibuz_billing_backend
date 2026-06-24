@@ -162,9 +162,6 @@ exports.registerSuperAdmin = async (req, res) => {
 };
 
 
-
-
-
 exports.login = async (req, res) => {
     try {
         const { email, CompanyEmail, phone, password } = req.body;
@@ -227,8 +224,7 @@ exports.login = async (req, res) => {
                 adminId,
                 superAdminId
             },
-            process.env.JWT_SECRET,
-            { expiresIn: "7d" }
+            process.env.JWT_SECRET
         );
 
         user.lastLogin = new Date();
@@ -484,7 +480,9 @@ exports.resetPassword = async (req, res) => {
 
 exports.logout = async (req, res) => {
     try {
-        blacklistToken(req.token);
+         const token = req.token;
+
+        blacklistToken(token);
 
         return res.status(200).json({
             success: true,
