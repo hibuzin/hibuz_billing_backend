@@ -282,3 +282,72 @@ exports.createRepack = async (req, res) => {
         });
     }
 };
+
+
+exports.getRepacks = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+
+        const repacks = await Repack.find({
+            superAdminId: hierarchy.superAdminId
+        })
+            .populate("fromProductId", "name brand unit unitValue")
+            .populate("outputs.toProductId", "name brand unit unitValue")
+            .sort({ createdAt: -1 });
+
+        return res.status(200).json({
+            success: true,
+            message: "Repacks fetched successfully",
+            count: repacks.length,
+            data: repacks
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+};
+
+exports.getRepackById = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid repack id"
+            });
+        }
+
+        const repack = await Repack.findOne({
+            _id: id,
+            superAdminId: hierarchy.superAdminId
+        })
+            .populate("fromProductId", "name brand unit unitValue")
+            .populate("outputs.toProductId", "name brand unit unitValue");
+
+        if (!repack) {
+            return res.status(404).json({
+                success: false,
+                message: "Repack not found"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Repack fetched successfully",
+            data: repack
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+};

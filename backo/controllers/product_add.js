@@ -260,8 +260,8 @@ exports.bulkProductCreate = async (req, res) => {
         }
 
         const hierarchy = attachHierarchy(req.user);
-        const allowedGstRates = [0, 5, 12, 18, 28];
 
+        const allowedGstRates = [0, 5, 12, 18, 28];
         const allowedUnits = ["pcs", "kg", "g"];
 
         const createdProducts = [];
@@ -276,42 +276,9 @@ exports.bulkProductCreate = async (req, res) => {
                 const brand = item.brand ? String(item.brand).trim() : "";
                 const description = item.description ? String(item.description).trim() : "";
                 const categoryId = item.categoryId;
+
                 const hsnCode = item.hsnCode ? String(item.hsnCode).trim() : "";
                 const barcodeCode = item.barcode ? String(item.barcode).trim() : "";
-
-                const processedGstRate = Number(item.gstRate || 0);
-                const processedMrp = Number(item.mrp);
-
-                const finalUnit = item.unit
-                    ? String(item.unit).trim().toLowerCase()
-                    : "pcs";
-
-                const finalUnitValue = Number(item.unitValue || 1);
-                const processedCostPrice = Number(item.costPrice);
-                const processedSellingPrice = Number(item.sellingPrice);
-
-                if (!allowedUnits.includes(finalUnit)) {
-                    errors.push({
-                        row: i + 1,
-                        name,
-                        barcode: barcodeCode,
-                        message: "Unit must be pcs, kg or g"
-                    });
-                    continue;
-                }
-
-                if (
-                    finalUnitValue !== undefined &&
-                    (isNaN(finalUnitValue) || finalUnitValue <= 0)
-                ) {
-                    errors.push({
-                        row: i + 1,
-                        name,
-                        barcode: barcodeCode,
-                        message: "Valid unitValue is required"
-                    });
-                    continue;
-                }
 
                 if (!name || !categoryId) {
                     errors.push({
@@ -319,76 +286,6 @@ exports.bulkProductCreate = async (req, res) => {
                         name,
                         barcode: barcodeCode,
                         message: "Name and category required"
-                    });
-                    continue;
-                }
-
-                if (!hsnCode) {
-                    errors.push({
-                        row: i + 1,
-                        name,
-                        barcode: barcodeCode,
-                        message: "HSN code is required"
-                    });
-                    continue;
-                }
-
-                if (isNaN(processedGstRate) || !allowedGstRates.includes(processedGstRate)) {
-                    errors.push({
-                        row: i + 1,
-                        name,
-                        barcode: barcodeCode,
-                        message: "GST rate must be 0, 5, 12, 18 or 28"
-                    });
-                    continue;
-                }
-
-                if (isNaN(processedMrp) || processedMrp <= 0) {
-                    errors.push({
-                        row: i + 1,
-                        name,
-                        barcode: barcodeCode,
-                        message: "Valid MRP is required"
-                    });
-                    continue;
-                }
-
-                if (isNaN(processedCostPrice) || processedCostPrice < 0) {
-                    errors.push({
-                        row: i + 1,
-                        name,
-                        barcode: barcodeCode,
-                        message: "Valid cost price is required"
-                    });
-                    continue;
-                }
-
-                if (isNaN(processedSellingPrice) || processedSellingPrice < 0) {
-                    errors.push({
-                        row: i + 1,
-                        name,
-                        barcode: barcodeCode,
-                        message: "Valid selling price is required"
-                    });
-                    continue;
-                }
-
-                if (processedCostPrice > processedMrp) {
-                    errors.push({
-                        row: i + 1,
-                        name,
-                        barcode: barcodeCode,
-                        message: "Cost price cannot be greater than MRP"
-                    });
-                    continue;
-                }
-
-                if (processedSellingPrice > processedMrp) {
-                    errors.push({
-                        row: i + 1,
-                        name,
-                        barcode: barcodeCode,
-                        message: "Selling price cannot be greater than MRP"
                     });
                     continue;
                 }
@@ -404,6 +301,74 @@ exports.bulkProductCreate = async (req, res) => {
                         name,
                         barcode: barcodeCode,
                         message: "Category not found"
+                    });
+                    continue;
+                }
+
+                const processedGstRate = Number(item.gstRate || 0);
+
+                if (
+                    isNaN(processedGstRate) ||
+                    !allowedGstRates.includes(processedGstRate)
+                ) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "GST rate must be 0, 5, 12, 18 or 28"
+                    });
+                    continue;
+                }
+
+                let finalUnit = item.unit
+                    ? String(item.unit).trim().toLowerCase()
+                    : "pcs";
+
+                if (finalUnit === "gram" || finalUnit === "grams") {
+                    finalUnit = "g";
+                }
+
+                if (!allowedUnits.includes(finalUnit)) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Unit must be pcs, kg or g"
+                    });
+                    continue;
+                }
+
+                const finalUnitValue =
+                    item.unitValue !== undefined &&
+                        item.unitValue !== null &&
+                        item.unitValue !== ""
+                        ? Number(item.unitValue)
+                        : undefined;
+
+                if (
+                    finalUnitValue !== undefined &&
+                    (isNaN(finalUnitValue) || finalUnitValue <= 0)
+                ) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Valid unitValue is required"
+                    });
+                    continue;
+                }
+
+                const processedMrp = Number(item.mrp || 0);
+                const processedCostPrice = Number(item.costPrice || 0);
+                const processedSellingPrice = Number(item.sellingPrice || 0);
+                const processedLowStockQty = Number(item.lowStockQty || 10);
+
+                if (isNaN(processedLowStockQty) || processedLowStockQty < 0) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Valid low stock qty is required"
                     });
                     continue;
                 }
@@ -431,7 +396,7 @@ exports.bulkProductCreate = async (req, res) => {
                             row: i + 1,
                             name,
                             barcode: barcodeCode,
-                            message: "Barcode already exists in database"
+                            message: "Barcode already exists"
                         });
                         continue;
                     }
@@ -443,14 +408,15 @@ exports.bulkProductCreate = async (req, res) => {
                     description,
 
                     stock: 0,
+                    lowStockQty: processedLowStockQty,
                     reservedStock: 0,
-
-
 
                     mrp: processedMrp,
 
                     unit: finalUnit,
-                    ...(finalUnitValue !== undefined && { unitValue: finalUnitValue }),
+                    ...(finalUnitValue !== undefined && {
+                        unitValue: finalUnitValue
+                    }),
 
                     costPrice: processedCostPrice,
                     sellingPrice: processedSellingPrice,
@@ -478,13 +444,13 @@ exports.bulkProductCreate = async (req, res) => {
                         mrp: processedMrp,
 
                         unit: finalUnit,
-                        ...(finalUnitValue !== undefined && { unitValue: finalUnitValue }),
+                        ...(finalUnitValue !== undefined && {
+                            unitValue: finalUnitValue
+                        }),
 
                         costPrice: processedCostPrice,
                         sellingPrice: processedSellingPrice,
                         gstRate: processedGstRate,
-
-
 
                         isSold: false,
 
@@ -559,7 +525,6 @@ exports.bulkProductCreate = async (req, res) => {
     }
 };
 
-
 exports.getproductMrps = async (req, res) => {
     try {
         const { productId } = req.params;
@@ -609,11 +574,12 @@ exports.allProducts = async (req, res) => {
 
         products = await Promise.all(
             products.map(async (product) => {
-
-                const barcode = await Barcode.findOne({
+                const barcodes = await Barcode.find({
                     productId: product._id,
                     superAdminId: hierarchy.superAdminId
-                }).lean();
+                })
+                    .sort({ createdAt: -1 })
+                    .lean();
 
                 const priceLevel = await PriceLevel.findOne({
                     productId: product._id,
@@ -621,20 +587,32 @@ exports.allProducts = async (req, res) => {
                     isActive: true
                 }).lean();
 
+                const totalAvailableQty = barcodes.reduce(
+                    (sum, b) => sum + Number(b.availableQty || 0),
+                    0
+                );
+
                 return {
                     ...product,
 
-                    barcode: barcode?.code || "",
-                    barcodeId: barcode?._id || "",
-                    availableQty: barcode?.availableQty || 0,
+                    totalAvailableQty,
+                    barcodeCount: barcodes.length,
 
-                    unit: barcode?.unit || product.unit || "pcs",
-                    unitValue: barcode?.unitValue || product.unitValue || 1,
+                    barcodes: barcodes.map((barcode) => ({
+                        barcodeId: barcode._id,
+                        barcode: barcode.code || "",
 
-                    mrp: barcode?.mrp ?? product.mrp,
-                    costPrice: barcode?.costPrice ?? product.costPrice,
-                    sellingPrice: barcode?.sellingPrice ?? product.sellingPrice,
-                    gstRate: barcode?.gstRate ?? product.gstRate,
+                        qty: barcode.qty || 0,
+                        availableQty: barcode.availableQty || 0,
+
+                        unit: barcode.unit || product.unit || "pcs",
+                        unitValue: barcode.unitValue || product.unitValue || 1,
+
+                        mrp: barcode.mrp ?? product.mrp,
+                        costPrice: barcode.costPrice ?? product.costPrice,
+                        sellingPrice: barcode.sellingPrice ?? product.sellingPrice,
+                        gstRate: barcode.gstRate ?? product.gstRate
+                    })),
 
                     priceLevel: priceLevel
                         ? {
@@ -819,10 +797,10 @@ exports.searchProductsByCategory = async (req, res) => {
     }
 };
 
+
 exports.ProductsById = async (req, res) => {
     try {
         const { id } = req.params;
-
         const hierarchy = attachHierarchy(req.user);
 
         const product = await Product.findOne({
@@ -840,10 +818,12 @@ exports.ProductsById = async (req, res) => {
             });
         }
 
-        const barcode = await Barcode.findOne({
+        const barcodes = await Barcode.find({
             productId: product._id,
             superAdminId: hierarchy.superAdminId
-        }).lean();
+        })
+            .sort({ createdAt: -1 })
+            .lean();
 
         const priceLevel = await PriceLevel.findOne({
             productId: product._id,
@@ -851,24 +831,36 @@ exports.ProductsById = async (req, res) => {
             isActive: true
         }).lean();
 
+        const totalAvailableQty = barcodes.reduce(
+            (sum, barcode) => sum + Number(barcode.availableQty || 0),
+            0
+        );
+
         return res.status(200).json({
             success: true,
             data: {
                 ...product,
 
-                barcode: barcode?.code || "",
-                barcodeId: barcode?._id || "",
-                availableQty: barcode?.availableQty || 0,
-
-                unit: barcode?.unit || product.unit || "pcs",
-                unitValue: barcode?.unitValue || product.unitValue || 1,
-
-                mrp: barcode?.mrp ?? product.mrp,
-                costPrice: barcode?.costPrice ?? product.costPrice,
-                sellingPrice: barcode?.sellingPrice ?? product.sellingPrice,
-                gstRate: barcode?.gstRate ?? product.gstRate,
+                totalAvailableQty,
+                barcodeCount: barcodes.length,
 
                 lowStockQty: product.lowStockQty || 10,
+
+                barcodes: barcodes.map((barcode) => ({
+                    barcodeId: barcode._id,
+                    barcode: barcode.code || "",
+
+                    qty: barcode.qty || 0,
+                    availableQty: barcode.availableQty || 0,
+
+                    unit: barcode.unit || product.unit || "pcs",
+                    unitValue: barcode.unitValue || product.unitValue || 1,
+
+                    mrp: barcode.mrp ?? product.mrp,
+                    costPrice: barcode.costPrice ?? product.costPrice,
+                    sellingPrice: barcode.sellingPrice ?? product.sellingPrice,
+                    gstRate: barcode.gstRate ?? product.gstRate
+                })),
 
                 priceLevel: priceLevel || null
             }
@@ -947,23 +939,20 @@ exports.updateProduct = async (req, res) => {
         }
 
         if (hsnCode !== undefined) {
-            if (!hsnCode) {
-                return res.status(400).json({
-                    success: false,
-                    message: "HSN code is required"
-                });
-            }
-
-            product.hsnCode = String(hsnCode).trim();
+            product.hsnCode = hsnCode ? String(hsnCode).trim() : "";
         }
 
         if (gstRate !== undefined) {
+            const allowedGstRates = [0, 5, 12, 18, 28];
             const processedGstRate = Number(gstRate);
 
-            if (isNaN(processedGstRate) || processedGstRate < 0) {
+            if (
+                isNaN(processedGstRate) ||
+                !allowedGstRates.includes(processedGstRate)
+            ) {
                 return res.status(400).json({
                     success: false,
-                    message: "Valid GST rate is required"
+                    message: "GST rate must be 0, 5, 12, 18 or 28"
                 });
             }
 
@@ -973,7 +962,7 @@ exports.updateProduct = async (req, res) => {
         if (mrp !== undefined) {
             const processedMrp = Number(mrp);
 
-            if (isNaN(processedMrp) || processedMrp <= 0) {
+            if (isNaN(processedMrp) || processedMrp < 0) {
                 return res.status(400).json({
                     success: false,
                     message: "Valid MRP is required"
@@ -983,15 +972,19 @@ exports.updateProduct = async (req, res) => {
             product.mrp = processedMrp;
         }
 
-        const allowedUnits = ["pcs", "kg"];
+        const allowedUnits = ["pcs", "kg", "g"];
 
         if (unit !== undefined) {
-            const finalUnit = String(unit).trim().toLowerCase();
+            let finalUnit = String(unit).trim().toLowerCase();
+
+            if (finalUnit === "gram" || finalUnit === "grams") {
+                finalUnit = "g";
+            }
 
             if (!allowedUnits.includes(finalUnit)) {
                 return res.status(400).json({
                     success: false,
-                    message: "Unit must be pcs or kg "
+                    message: "Unit must be pcs, kg or g"
                 });
             }
 
@@ -1076,7 +1069,11 @@ exports.updateProduct = async (req, res) => {
 
         let createdBarcode = null;
 
-        if (barcode !== undefined && barcode !== null && String(barcode).trim() !== "") {
+        if (
+            barcode !== undefined &&
+            barcode !== null &&
+            String(barcode).trim() !== ""
+        ) {
             const barcodeCode = String(barcode).trim();
 
             const existingBarcode = await Barcode.findOne({
@@ -1108,11 +1105,7 @@ exports.updateProduct = async (req, res) => {
                     gstRate: product.gstRate || 0,
 
                     unit: product.unit || "pcs",
-                    ...(product.unitValue !== undefined &&
-                        product.unitValue !== null &&
-                        product.unitValue !== "" && {
-                        unitValue: product.unitValue
-                    }),
+                    unitValue: product.unitValue || 1,
 
                     isSold: false,
 
@@ -1121,6 +1114,8 @@ exports.updateProduct = async (req, res) => {
                 });
             }
         }
+
+        await product.save();
 
         await Barcode.updateMany(
             {
@@ -1132,21 +1127,23 @@ exports.updateProduct = async (req, res) => {
                     mrp: product.mrp,
                     costPrice: product.costPrice,
                     sellingPrice: product.sellingPrice,
-                    gstRate: product.gstRate,
-                    unit: product.unit,
-                    unitValue: product.unitValue
+                    gstRate: product.gstRate
                 }
             }
         );
 
-        await product.save();
+        const barcodes = await Barcode.find({
+            productId: product._id,
+            superAdminId: hierarchy.superAdminId
+        }).lean();
 
         return res.json({
             success: true,
             message: "Product updated successfully",
             data: {
                 product,
-                barcode: createdBarcode
+                createdBarcode,
+                barcodes
             }
         });
 
@@ -1165,6 +1162,7 @@ exports.updateProduct = async (req, res) => {
         });
     }
 };
+
 
 exports.deleteAllProducts = async (req, res) => {
 
