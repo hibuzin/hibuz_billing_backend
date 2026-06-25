@@ -253,92 +253,11 @@ exports.createPurchase = async (req, res) => {
 
 
             const mrp = Number(item.mrp);
-
-            if (!productId) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Product id is required"
-                });
-            }
-
-            const product = await Product.findOne({
-                _id: productId,
-                superAdminId: hierarchy.superAdminId
-            }).populate("categoryId", "name");
-
-            if (!product) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Product not found"
-                });
-            }
-
-            let purchaseUnit = item.unit
-                ? String(item.unit).trim().toLowerCase()
-                : String(product.unit || "pcs").trim().toLowerCase();
-
-            if (purchaseUnit === "gram") purchaseUnit = "g";
-            if (purchaseUnit === "grams") purchaseUnit = "g";
-
-            const purchaseUnitValue =
-                item.unitValue !== undefined &&
-                    item.unitValue !== null &&
-                    item.unitValue !== ""
-                    ? Number(item.unitValue)
-                    : Number(product.unitValue || 1);
-
-
-            let qty = 0;
-            let stockQty = 0;
-
-            if (purchaseUnit === "pcs") {
-                qty = Number(item.qty);
-                stockQty = qty;
-
-                if (isNaN(qty) || qty <= 0) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "Quantity is required for pcs"
-                    });
-                }
-            }
-
-            else if (purchaseUnit === "kg") {
-                if (isNaN(purchaseUnitValue) || purchaseUnitValue <= 0) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "unitValue is required for kg"
-                    });
-                }
-
-                qty = 0;
-                stockQty = purchaseUnitValue;
-            }
-
-            else if (purchaseUnit === "g") {
-                if (isNaN(purchaseUnitValue) || purchaseUnitValue <= 0) {
-                    return res.status(400).json({
-                        success: false,
-                        message: "unitValue is required for gram"
-                    });
-                }
-
-                qty = 0;
-                stockQty = purchaseUnitValue / 1000;
-            }
-
-            else {
-                return res.status(400).json({
-                    success: false,
-                    message: "Unit must be pcs, kg or g"
-                });
-            }
-
+            const qty = Number(item.qty);
             const freeQty = Number(item.freeQty || 0);
 
-
             const netcost = Number(item.netcost || item.netCost);
-            const netAmount = round2(netcost * stockQty);
+            const netAmount = round2(netcost * qty);
 
             const sellingPrice = Number(item.sellingPrice || mrp);
 
@@ -352,20 +271,10 @@ exports.createPurchase = async (req, res) => {
                 });
             }
 
-            if (purchaseUnit === "pcs" && (isNaN(qty) || qty <= 0)) {
+            if (isNaN(qty) || qty <= 0) {
                 return res.status(400).json({
                     success: false,
                     message: "Invalid quantity"
-                });
-            }
-
-            if (
-                (purchaseUnit === "kg" || purchaseUnit === "g") &&
-                (isNaN(stockQty) || stockQty <= 0)
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid unit value"
                 });
             }
 
@@ -390,6 +299,39 @@ exports.createPurchase = async (req, res) => {
                 });
             }
 
+            
+            const product = await Product.findOne({
+                _id: productId,
+                superAdminId: hierarchy.superAdminId
+            }).populate("categoryId", "name");
+
+            if (!product) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Product not found"
+                });
+            }
+
+            const purchaseUnit = product.unit || "pcs";
+            const qtyType = purchaseUnit === "kg" ? "kg" : "unit";
+            const purchaseUnitValue = Number(product.unitValue || 1);
+
+            if (!["pcs", "kg"].includes(purchaseUnit)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Unit must be pcs or kg"
+                });
+            }
+
+            if (
+                qtyType === "unit" &&
+                (isNaN(purchaseUnitValue) || purchaseUnitValue <= 0)
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid unitValue is required"
+                });
+            }
 
             if (!barcode) {
                 const productBarcode = await Barcode.findOne({
@@ -424,9 +366,26 @@ exports.createPurchase = async (req, res) => {
 
             const isGstIncluded = item.isGstIncluded !== false;
 
-            const totalStockQty = stockQty + freeQty;
+            const totalStockQty = qty + freeQty;
 
-            const grossAmount = round2(totalStockQty * netcost);
+            let stockQty = 0;
+
+            if (purchaseUnit === "kg") {
+                if (qtyType === "unit") {
+                    stockQty = totalStockQty * purchaseUnitValue;
+                } else if (qtyType === "kg") {
+                    stockQty = totalStockQty;
+                } else {
+                    return res.status(400).json({
+                        success: false,
+                        message: "qtyType must be unit or kg"
+                    });
+                }
+            } else {
+                stockQty = totalStockQty;
+            }
+
+            const grossAmount = round2(qty * netcost);
 
             const percentDiscountAmount = round2(
                 grossAmount * discountPercent / 100
@@ -462,7 +421,7 @@ exports.createPurchase = async (req, res) => {
             } else {
                 amount = amountAfterDiscount;
                 taxAmount = round2(amount * taxPercentage / 100);
-                totalCostWithGST = round2(amount + amount);
+                totalCostWithGST = round2(amount + taxAmount);
             }
 
             totalGrossAmount = round2(
@@ -530,8 +489,8 @@ exports.createPurchase = async (req, res) => {
                         },
                         $inc: {
 
-                            qty: totalStockQty,
-                            availableQty: totalStockQty
+                            qty: stockQty,
+                            availableQty: stockQty
 
                         }
                     },
@@ -583,7 +542,7 @@ exports.createPurchase = async (req, res) => {
                 },
                 {
                     $inc: {
-                        stock: totalStockQty
+                        stock: stockQty
                     }
                 }
             );
@@ -635,7 +594,7 @@ exports.createPurchase = async (req, res) => {
                 profitPercent,
                 roiPercent,
 
-                receivedQty: totalStockQty,
+                receivedQty: stockQty,
                 pendingQty: 0
             });
         }

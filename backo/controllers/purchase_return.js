@@ -194,14 +194,12 @@ exports.getByIdPurchaseReturn = async (req, res) => {
 
 exports.update_purchase_return_approve = async (req, res) => {
     try {
-
         const { id } = req.params;
 
         const { userId, role, superAdminId } = req.user;
 
         const finalSuperAdminId =
             role === "super_admin" ? userId : superAdminId;
-
 
         const request = await Return.findOne({
             _id: id,
@@ -222,9 +220,7 @@ exports.update_purchase_return_approve = async (req, res) => {
             });
         }
 
-
         for (const item of request.items) {
-
             const product = await Product.findOne({
                 _id: item.productId,
                 superAdminId: finalSuperAdminId
@@ -237,7 +233,7 @@ exports.update_purchase_return_approve = async (req, res) => {
                 });
             }
 
-            if (product.stock < item.qty) {
+            if (Number(product.stock) < Number(item.qty)) {
                 return res.status(400).json({
                     success: false,
                     message: `${product.name} insufficient stock`
@@ -251,14 +247,13 @@ exports.update_purchase_return_approve = async (req, res) => {
                 },
                 {
                     $inc: {
-                        stock: -item.qty
+                        stock: -Number(item.qty)
                     }
                 }
             );
         }
 
         request.status = "approved";
-
         await request.save();
 
         res.json({
@@ -278,7 +273,7 @@ exports.update_purchase_return_approve = async (req, res) => {
 
 
 exports.update_purchase_return_reject = async (req, res) => {
- try {
+    try {
 
         const { id } = req.params;
 

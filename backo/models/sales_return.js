@@ -1,63 +1,66 @@
+// models/sales_return.js
+
 const mongoose = require("mongoose");
 
-const salesReturnSchema = new mongoose.Schema(
-    {
-        invoiceId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "SalesInvoice",
-            required: true
-        },
+const SalesReturnSchema = new mongoose.Schema({
+    returnNo: String,
 
-        items: [
-            {
-                productId: {
-                    type: mongoose.Schema.Types.ObjectId,
-                    ref: "Product",
-                    required: true
-                },
-                qty: {
-                    type: Number,
-                    required: true
-                },
-                reason: {
-                    type: String,
-                    default: ""
-                },
-                amount: {
-                    type: Number,
-                    default: 0
-                }
-            }
-        ],
-
-        totalReturnAmount: {
-            type: Number,
-            default: 0
-        },
-
-        status: {
-            type: String,
-            enum: ["completed", "cancelled"],
-            default: "completed"
-        },
-
-        superAdminId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User",
-            required: true
-        },
-
-        adminId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User"
-        },
-
-        createdBy: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User"
-        }
+    billId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Bill"
     },
-    { timestamps: true }
-);
 
-module.exports = mongoose.model("SalesReturn", salesReturnSchema);
+    invoiceNo: String,
+
+    customerId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Customer"
+    },
+
+    items: [
+        {
+            productId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Product"
+            },
+            barcodeId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Barcode"
+            },
+            barcode: String,
+
+            productName: String,
+
+            soldQty: Number,
+            returnQty: Number,
+
+            sellingPrice: Number,
+            gstRate: Number,
+            gstAmount: Number,
+
+            returnAmount: Number
+        }
+    ],
+
+    totalReturnAmount: Number,
+
+    refundMethod: {
+        type: String,
+        enum: ["cash", "upi", "card", "adjust"]
+    },
+
+    reason: String,
+
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+    },
+
+    superAdminId: mongoose.Schema.Types.ObjectId,
+    adminId: mongoose.Schema.Types.ObjectId
+
+}, {
+    timestamps: true
+});
+
+module.exports = mongoose.model("SalesReturn", SalesReturnSchema);

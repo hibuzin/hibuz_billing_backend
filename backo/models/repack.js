@@ -12,10 +12,6 @@ const repackSchema = new mongoose.Schema(
 
         fromBarcode: String,
 
-        fromkg: {
-            type: Number,
-            required: true
-        },
 
         fromUnit: {
             type: String,

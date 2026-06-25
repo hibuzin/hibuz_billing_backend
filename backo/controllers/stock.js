@@ -34,7 +34,7 @@ exports.allstockcheck = async (req, res) => {
                     Number(barcode?.availableQty || 0).toFixed(2)
                 );
 
-                const currentStock = barcode ? barcodeStock : productStock;
+                const currentStock = productStock;
 
                 const purchasedQty = Number(item.qty || 0);
                 const receivedQty = Number(item.receivedQty || item.qty || 0);
@@ -87,7 +87,7 @@ exports.allstockcheck = async (req, res) => {
                     barcode: item.barcode || barcode?.code || "",
 
                     currentStock,
-                   
+
 
 
                     mrp: item.mrp || 0,
@@ -99,13 +99,13 @@ exports.allstockcheck = async (req, res) => {
 
                     unitValue: item.unitValue || "",
 
-                    
+
 
                     unitText: item.unitValue
                         ? `${item.unitValue} ${item.unit || "pcs"}`
                         : `${item.unit || "pcs"}`,
 
-                   
+
 
                     kg: item.kg || "",
 
@@ -376,9 +376,7 @@ exports.productStockById = async (req, res) => {
                     superAdminId: hierarchy.superAdminId
                 }).select("code qty availableQty");
 
-                const currentStock = Number(
-                    barcode?.availableQty ?? product.stock ?? 0
-                );
+                const currentStock = Number(product.stock || 0);
 
                 const qty = Number(item.qty || 0);
                 const receivedQty = Number(item.receivedQty || item.qty || 0);
@@ -404,7 +402,7 @@ exports.productStockById = async (req, res) => {
                     barcode: barcode?.code || item.barcode || "",
 
                     currentStock,
-                   
+
 
                     mrp: item.mrp || 0,
                     costPrice,
@@ -413,15 +411,11 @@ exports.productStockById = async (req, res) => {
                     unit: item.unit || product.unit || "pcs",
                     unitValue: item.unitValue || "",
 
-                    displayName: item.unitValue
-                        ? `${item.unitValue} ${item.unit || product.unit || "pcs"} ${product.name}`
-                        : `${item.unit || product.unit || "pcs"} ${product.name}`,
-
                     unitText: item.unitValue
                         ? `${item.unitValue} ${item.unit || product.unit || "pcs"}`
                         : `${item.unit || product.unit || "pcs"}`,
 
-                  
+
 
                     kg: item.kg || "",
 
@@ -447,10 +441,6 @@ exports.productStockById = async (req, res) => {
                 productId: product._id,
                 productName: product.name,
                 brand: product.brand || "",
-
-                displayName: latestItem?.unitValue
-                    ? `${latestItem.unitValue} ${latestItem.unit || product.unit || "pcs"} ${product.name}`
-                    : `${product.unit || "pcs"} ${product.name}`,
 
                 unit: product.unit || "pcs",
                 unitValue: latestItem?.unitValue || product.unitValue || "",
