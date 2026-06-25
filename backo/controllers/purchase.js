@@ -44,6 +44,24 @@ exports.calculatePurchase = async (req, res) => {
             const freeQty = Number(item.freeQty || 0);
             const totalStockQty = qty + freeQty;
 
+            const unit = String(item.unit || item.productUnit || "pcs").trim().toLowerCase();
+            const unitValue = Number(item.unitValue || 1);
+            const qtyType = item.qtyType || "unit";
+
+            let stockQty = 0;
+
+            if (unit === "kg" || unit === "g") {
+                if (qtyType === "unit") {
+                    stockQty = totalStockQty * unitValue;
+                } else if (qtyType === "kg") {
+                    stockQty = totalStockQty;
+                } else {
+                    throw new Error(`qtyType must be unit or kg at item ${index + 1}`);
+                }
+            } else {
+                stockQty = totalStockQty;
+            }
+
             const netcost = Number(item.netcost || item.purchasePrice || item.netCost);
             const mrp = Number(item.mrp);
             const sellingPrice = Number(item.sellingPrice || mrp);
@@ -86,12 +104,13 @@ exports.calculatePurchase = async (req, res) => {
                 totalCostWithGST = amountAfterDiscount;
 
                 taxAmount = round2(
-                    amountAfterDiscount * taxPercentage / 100
+                    amountAfterDiscount * taxPercentage / (100 + taxPercentage)
                 );
 
                 amount = round2(
                     amountAfterDiscount - taxAmount
                 );
+
             } else {
                 amount = amountAfterDiscount;
 
@@ -155,7 +174,12 @@ exports.calculatePurchase = async (req, res) => {
                 taxAmount,
 
                 barcode: item.barcode || "",
-                receivedQty: totalStockQty,
+
+                unit,
+                unitValue,
+                qtyType,
+                stockQty,
+                receivedQty: stockQty,
                 pendingQty: 0
             };
         });
@@ -321,7 +345,7 @@ exports.createPurchase = async (req, res) => {
 
             const isCustomUnitValue = item.unitValue !== undefined;
 
-            const qtyType = purchaseUnit === "kg" ? "unit" : "unit";
+            const qtyType = item.qtyType || "unit";
 
             if (!["pcs", "kg", "g"].includes(purchaseUnit)) {
                 return res.status(400).json({
@@ -419,9 +443,9 @@ exports.createPurchase = async (req, res) => {
                 totalCostWithGST = amountAfterDiscount;
 
                 taxAmount = round2(
-                    amountAfterDiscount * taxPercentage / 100
+                    amountAfterDiscount * taxPercentage / (100 + taxPercentage)
                 );
-
+                
                 amount = round2(
                     amountAfterDiscount - taxAmount
                 );
@@ -585,6 +609,8 @@ exports.createPurchase = async (req, res) => {
                 totalStockQty,
 
                 qty,
+                qtyType,
+
                 netcost,
                 netAmount,
                 Rate,
