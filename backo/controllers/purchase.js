@@ -299,7 +299,7 @@ exports.createPurchase = async (req, res) => {
                 });
             }
 
-            
+
             const product = await Product.findOne({
                 _id: productId,
                 superAdminId: hierarchy.superAdminId
@@ -313,10 +313,17 @@ exports.createPurchase = async (req, res) => {
             }
 
             const purchaseUnit = product.unit || "pcs";
-            const qtyType = purchaseUnit === "kg" ? "kg" : "unit";
-            const purchaseUnitValue = Number(product.unitValue || 1);
 
-            if (!["pcs", "kg"].includes(purchaseUnit)) {
+
+            const purchaseUnitValue = item.unitValue
+                ? Number(item.unitValue)
+                : Number(product.unitValue || 1);
+
+            const isCustomUnitValue = item.unitValue !== undefined;
+
+            const qtyType = purchaseUnit === "kg" ? "unit" : "unit";
+
+            if (!["pcs", "kg", "g"].includes(purchaseUnit)) {
                 return res.status(400).json({
                     success: false,
                     message: "Unit must be pcs or kg"
@@ -370,7 +377,7 @@ exports.createPurchase = async (req, res) => {
 
             let stockQty = 0;
 
-            if (purchaseUnit === "kg") {
+            if (purchaseUnit === "kg" || purchaseUnit === "g") {
                 if (qtyType === "unit") {
                     stockQty = totalStockQty * purchaseUnitValue;
                 } else if (qtyType === "kg") {
@@ -481,6 +488,7 @@ exports.createPurchase = async (req, res) => {
 
                             unit: purchaseUnit,
                             unitValue: purchaseUnitValue,
+                            isCustomUnitValue,
 
                             isSold: false,
 
@@ -585,6 +593,7 @@ exports.createPurchase = async (req, res) => {
 
                 unit: purchaseUnit,
                 unitValue: purchaseUnitValue,
+                isCustomUnitValue,
 
                 sellingPrice,
                 priceLevel,
@@ -698,6 +707,8 @@ exports.createPurchase = async (req, res) => {
 
                     productName: item.productId?.name || "",
 
+                    isCustomUnitValue: item.isCustomUnitValue || false,
+
                     description:
                         item.description || "",
 
@@ -713,8 +724,6 @@ exports.createPurchase = async (req, res) => {
 
                     categoryName:
                         item.categoryName || "",
-
-
 
                     qty:
                         item.qty || 0,
@@ -1420,7 +1429,7 @@ exports.updatePurchase = async (req, res) => {
                 ? Number(item.unitValue)
                 : Number(product.unitValue || 1);
 
-            if (!["pcs", "kg"].includes(purchaseUnit)) {
+            if (!["pcs", "kg", "g"].includes(purchaseUnit)) {
                 return res.status(400).json({
                     success: false,
                     message: "Unit must be pcs or kg"

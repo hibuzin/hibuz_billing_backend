@@ -96,6 +96,11 @@ const purchaseSchema = new mongoose.Schema({
                 required: true
             },
 
+            isCustomUnitValue: {
+                type: Boolean,
+                default: false
+            },
+
             freeQty: {
                 type: Number,
                 default: 0
