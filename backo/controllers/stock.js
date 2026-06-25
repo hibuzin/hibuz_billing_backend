@@ -9,119 +9,73 @@ exports.allstockcheck = async (req, res) => {
     try {
         const hierarchy = attachHierarchy(req.user);
 
-        const purchases = await Purchase.find({
+        const barcodes = await Barcode.find({
             superAdminId: hierarchy.superAdminId
         })
-            .populate("items.productId", "name brand stock")
+            .populate("productId", "name brand stock unit unitValue mrp costPrice sellingPrice")
             .sort({ createdAt: -1 });
 
-        let data = [];
+        const data = [];
 
-        for (const purchase of purchases) {
-            for (const item of purchase.items) {
+        const formatQty = (value) => {
+            const num = Number(value || 0);
+            return Number.isInteger(num) ? String(num) : String(Number(num.toFixed(2)));
+        };
 
-                const barcode = await Barcode.findOne({
-                    productId: item.productId?._id,
-                    code: item.barcode,
-                    superAdminId: hierarchy.superAdminId
-                }).select("code qty availableQty unit unitValue");
+        for (const barcode of barcodes) {
+            const product = barcode.productId;
 
-                const productStock = Number(
-                    Number(item.productId?.stock || 0).toFixed(2)
-                );
+            if (!product) continue;
 
-                const barcodeStock = Number(
-                    Number(barcode?.availableQty || 0).toFixed(2)
-                );
+            const currentStock = Number(Number(barcode.availableQty || 0).toFixed(2));
+            const totalQty = Number(Number(barcode.qty || 0).toFixed(2));
 
-                const currentStock = productStock;
+            const unit = barcode.unit || product.unit || "pcs";
+            const unitValue = Number(barcode.unitValue || product.unitValue || 1);
 
-                const purchasedQty = Number(item.qty || 0);
-                const receivedQty = Number(item.receivedQty || item.qty || 0);
-                const pendingQty = Number(item.pendingQty || 0);
+            let totalStockText = "";
 
-                const soldQty = Math.max(
-                    Number((purchasedQty - currentStock).toFixed(2)),
-                    0
-                );
-
-                const formatStockQty = (value) => {
-                    const num = Number(value || 0);
-                    return Number.isInteger(num)
-                        ? String(num)
-                        : String(Number(num.toFixed(2)));
-                };
-
-                const stockUnit = item.unit || barcode?.unit || "pcs";
-                const stockUnitValue = Number(item.unitValue || barcode?.unitValue || 0);
-
-                let totalStockText = "";
-
-                if (stockUnit === "kg") {
-                    totalStockText = `${formatStockQty(
-                        currentStock * stockUnitValue
-                    )} kg`;
-                }
-
-                else if (stockUnit === "g") {
-
-                    const totalKg =
-                        (currentStock * stockUnitValue) / 1000;
-
-                    totalStockText = `${formatStockQty(totalKg)} kg`;
-                }
-
-                else {
-                    totalStockText = `${formatStockQty(currentStock)} pcs`;
-                }
-
-                data.push({
-                    purchaseId: purchase._id,
-                    invoiceNo: purchase.invoiceNo,
-                    invoiceDate: purchase.invoiceDate,
-
-                    productId: item.productId?._id || "",
-                    productName: item.productId?.name || "",
-                    brand: item.productId?.brand || item.brand || "",
-
-                    barcode: item.barcode || barcode?.code || "",
-
-                    currentStock,
-
-
-
-                    mrp: item.mrp || 0,
-                    costPrice: item.costPrice || 0,
-                    sellingPrice: item.sellingPrice || 0,
-
-
-                    unit: item.unit || "pcs",
-
-                    unitValue: item.unitValue || "",
-
-
-
-                    unitText: item.unitValue
-                        ? `${item.unitValue} ${item.unit || "pcs"}`
-                        : `${item.unit || "pcs"}`,
-
-
-
-                    kg: item.kg || "",
-
-                    purchasedQty,
-                    receivedQty,
-                    pendingQty,
-                    soldQty,
-
-                    status:
-                        currentStock <= 0
-                            ? "Out Of Stock"
-                            : currentStock <= 10
-                                ? "Low Stock"
-                                : "Available"
-                });
+            if (unit === "kg") {
+                totalStockText = `${formatQty(currentStock * unitValue)} kg`;
+            } else if (unit === "g") {
+                totalStockText = `${formatQty((currentStock * unitValue) / 1000)} kg`;
+            } else {
+                totalStockText = `${formatQty(currentStock)} pcs`;
             }
+
+            const soldQty = Math.max(
+                Number((totalQty - currentStock).toFixed(2)),
+                0
+            );
+
+            data.push({
+                productId: product._id,
+                productName: product.name || "",
+                brand: product.brand || "",
+
+                barcode: barcode.code,
+
+                totalQty,
+                currentStock,
+                soldQty,
+
+                totalStockText,
+
+                mrp: barcode.mrp || product.mrp || 0,
+                costPrice: barcode.costPrice || product.costPrice || 0,
+                sellingPrice: barcode.sellingPrice || product.sellingPrice || 0,
+
+                unit,
+                unitValue,
+                unitText: `${unitValue} ${unit}`,
+
+                status:
+                    currentStock <= 0
+                        ? "Out Of Stock"
+                        : currentStock <= 10
+                            ? "Low Stock"
+                            : "Available"
+            });
         }
 
         return res.status(200).json({
@@ -139,79 +93,74 @@ exports.allstockcheck = async (req, res) => {
     }
 };
 
-
 exports.getStockValue = async (req, res) => {
     try {
         const hierarchy = attachHierarchy(req.user);
 
-        const purchases = await Purchase.find({
-            superAdminId: hierarchy.superAdminId
-        })
-            .populate("items.productId", "name brand stock")
-            .sort({ createdAt: -1 });
-
-        const stockMap = {};
         const round2 = (num) =>
             Math.round((Number(num) + Number.EPSILON) * 100) / 100;
 
-        for (const purchase of purchases) {
-            for (const item of purchase.items) {
-                const product = item.productId;
-                if (!product) continue;
-
-                const barcode = await Barcode.findOne({
-                    productId: product._id,
-                    superAdminId: hierarchy.superAdminId
-                }).select("code availableQty");
-
-                const key = `${product._id}_${barcode?.code || ""}_${item.mrp}_${item.costPrice}_${item.sellingPrice}_${item.flavor}_${item.litters}`;
-
-                if (!stockMap[key]) {
-                    const currentStock = Number(
-                        barcode?.availableQty ?? product.stock ?? 0
-                    );
-
-                    stockMap[key] = {
-                        productId: product._id,
-                        productName: product.name || "",
-                        brand: product.brand || item.brand || "",
-
-                        barcode: barcode?.code || "",
-
-                        currentStock,
-                        productStock: Number(product.stock || 0),
-                        barcodeStock: Number(barcode?.availableQty || 0),
-
-                        mrp: Number(item.mrp || 0),
-                        costPrice: Number(item.costPrice || 0),
-                        sellingPrice: Number(item.sellingPrice || 0),
-
-
-                        kg: item.kg || "",
-
-                        costValue: 0,
-                        sellingValue: 0,
-                        mrpValue: 0
-                    };
-                }
-            }
-        }
+        const barcodes = await Barcode.find({
+            superAdminId: hierarchy.superAdminId
+        })
+            .populate("productId", "name brand stock mrp costPrice sellingPrice unit unitValue")
+            .sort({ createdAt: -1 });
 
         let totalCostValue = 0;
         let totalSellingValue = 0;
         let totalMrpValue = 0;
 
-        const data = Object.values(stockMap).map((item) => {
-            item.costValue = round2(item.currentStock * item.costPrice);
-            item.sellingValue = round2(item.currentStock * item.sellingPrice);
-            item.mrpValue = round2(item.currentStock * item.mrp);
+        const data = [];
 
-            totalCostValue += item.costValue;
-            totalSellingValue += item.sellingValue;
-            totalMrpValue += item.mrpValue;
+        for (const barcode of barcodes) {
+            const product = barcode.productId;
+            if (!product) continue;
 
-            return item;
-        });
+            const currentStock = Number(barcode.availableQty || 0);
+
+            const mrp = Number(barcode.mrp || product.mrp || 0);
+            const costPrice = Number(barcode.costPrice || product.costPrice || 0);
+            const sellingPrice = Number(barcode.sellingPrice || product.sellingPrice || 0);
+
+            const costValue = round2(currentStock * costPrice);
+            const sellingValue = round2(currentStock * sellingPrice);
+            const mrpValue = round2(currentStock * mrp);
+
+            totalCostValue += costValue;
+            totalSellingValue += sellingValue;
+            totalMrpValue += mrpValue;
+
+            data.push({
+                productId: product._id,
+                productName: product.name || "",
+                brand: product.brand || "",
+
+                barcode: barcode.code || "",
+
+                currentStock,
+                productStock: Number(product.stock || 0),
+                barcodeStock: currentStock,
+                barcodeQty: Number(barcode.qty || 0),
+
+                mrp,
+                costPrice,
+                sellingPrice,
+
+                costValue,
+                sellingValue,
+                mrpValue,
+
+                unit: barcode.unit || product.unit || "pcs",
+                unitValue: barcode.unitValue || product.unitValue || 1,
+
+                status:
+                    currentStock <= 0
+                        ? "Out Of Stock"
+                        : currentStock <= 10
+                            ? "Low Stock"
+                            : "Available"
+            });
+        }
 
         return res.status(200).json({
             success: true,
@@ -247,69 +196,70 @@ exports.getproductsearchstock = async (req, res) => {
             });
         }
 
-        const searchText = search.trim().toLowerCase();
+        const searchText = search.trim();
 
-        const purchases = await Purchase.find({
-            superAdminId: hierarchy.superAdminId
+        const products = await Product.find({
+            superAdminId: hierarchy.superAdminId,
+            $or: [
+                { name: { $regex: searchText, $options: "i" } },
+                { brand: { $regex: searchText, $options: "i" } }
+            ]
+        });
+
+        const productIds = products.map(p => p._id);
+
+        const barcodes = await Barcode.find({
+            superAdminId: hierarchy.superAdminId,
+            $or: [
+                { productId: { $in: productIds } },
+                { code: { $regex: searchText, $options: "i" } }
+            ]
         })
-            .populate("items.productId", "name brand stock unit unitValue")
+            .populate("productId", "name brand stock unit unitValue mrp costPrice sellingPrice")
             .sort({ createdAt: -1 });
 
         const data = [];
 
-        for (const purchase of purchases) {
-            for (const item of purchase.items) {
-                const productName = item.productId?.name || "";
-                const brand = item.productId?.brand || item.brand || "";
-                const barcodeCode = item.barcode || "";
+        for (const barcode of barcodes) {
+            const product = barcode.productId;
+            if (!product) continue;
 
-                const matched =
-                    productName.toLowerCase().includes(searchText) ||
-                    brand.toLowerCase().includes(searchText) ||
-                    barcodeCode.toLowerCase().includes(searchText);
+            const currentStock = Number(barcode.availableQty || 0);
+            const barcodeQty = Number(barcode.qty || 0);
 
-                if (matched) {
-                    const barcode = await Barcode.findOne({
-                        productId: item.productId?._id,
-                        code: item.barcode,
-                        superAdminId: hierarchy.superAdminId
-                    }).select("code qty availableQty unit unitValue");
+            data.push({
+                productId: product._id,
+                productName: product.name || "",
+                brand: product.brand || "",
 
-                    const currentStock = Number(
-                        barcode?.availableQty ?? item.productId?.stock ?? 0
-                    );
+                barcode: barcode.code,
 
-                    data.push({
-                        productId: item.productId?._id || item.productId,
-                        productName,
-                        brand,
+                currentStock,
+                productStock: Number(product.stock || 0),
+                barcodeStock: currentStock,
+                barcodeQty,
 
-                        barcode: barcode?.code || item.barcode || "",
+                soldQty: Math.max(
+                    Number((barcodeQty - currentStock).toFixed(2)),
+                    0
+                ),
 
-                        mrp: item.mrp || 0,
-                        costPrice: item.costPrice || 0,
-                        sellingPrice: item.sellingPrice || 0,
+                mrp: barcode.mrp || product.mrp || 0,
+                costPrice: barcode.costPrice || product.costPrice || 0,
+                sellingPrice: barcode.sellingPrice || product.sellingPrice || 0,
 
-                        currentStock,
-                        productStock: Number(item.productId?.stock || 0),
-                        barcodeStock: Number(barcode?.availableQty || 0),
-                        barcodeQty: Number(barcode?.qty || 0),
+                unit: barcode.unit || product.unit || "pcs",
+                unitValue: barcode.unitValue || product.unitValue || 1,
 
-                        unit: item.unit || item.productId?.unit || "pcs",
-                        unitValue: item.unitValue || item.productId?.unitValue || 1,
+                displayName: `${barcode.unitValue || product.unitValue || 1} ${barcode.unit || product.unit || "pcs"} ${product.name}`,
 
-                        kg: item.kg || "",
-
-                        displayName: item.unitValue
-                            ? `${item.unitValue} ${item.unit || "pcs"} ${productName}`
-                            : `${item.unit || "pcs"} ${productName}`,
-
-                        totalUnitText: item.unitValue
-                            ? `${currentStock * Number(item.unitValue || 0)} ${item.unit || "pcs"}`
-                            : `${currentStock} ${item.unit || "pcs"}`
-                    });
-                }
-            }
+                status:
+                    currentStock <= 0
+                        ? "Out Of Stock"
+                        : currentStock <= 10
+                            ? "Low Stock"
+                            : "Available"
+            });
         }
 
         return res.status(200).json({
@@ -351,91 +301,87 @@ exports.productStockById = async (req, res) => {
             });
         }
 
-        const purchases = await Purchase.find({
-            superAdminId: hierarchy.superAdminId,
-            "items.productId": productId
-        })
-            .populate("items.productId", "name brand stock")
-            .sort({ createdAt: -1 });
+        const barcodes = await Barcode.find({
+            productId,
+            superAdminId: hierarchy.superAdminId
+        }).sort({ createdAt: -1 });
 
-        let totalPurchasedQty = 0;
-        let totalReceivedQty = 0;
-        let totalPendingQty = 0;
+        let totalQty = 0;
+        let currentStock = 0;
         let totalCostValue = 0;
         let totalSellingValue = 0;
 
         const data = [];
 
-        for (const purchase of purchases) {
-            for (const item of purchase.items) {
-                if (String(item.productId?._id) !== String(productId)) continue;
+        const formatQty = (value) => {
+            const num = Number(value || 0);
+            return Number.isInteger(num)
+                ? String(num)
+                : String(Number(num.toFixed(2)));
+        };
 
-                const barcode = await Barcode.findOne({
-                    productId: productId,
-                    code: item.barcode,
-                    superAdminId: hierarchy.superAdminId
-                }).select("code qty availableQty unit unitValue");
+        for (const barcode of barcodes) {
+            const barcodeQty = Number(barcode.qty || 0);
+            const availableQty = Number(barcode.availableQty || 0);
 
-                const currentStock = barcode
-                    ? Number(barcode.availableQty || 0)
-                    : Number(product.stock || 0);
+            const unit = barcode.unit || product.unit || "pcs";
+            const unitValue = Number(barcode.unitValue || product.unitValue || 1);
 
-                const qty = Number(item.qty || 0);
-                const receivedQty = Number(item.receivedQty || item.qty || 0);
-                const pendingQty = Number(item.pendingQty || 0);
-                const costPrice = Number(item.costPrice || 0);
-                const sellingPrice = Number(item.sellingPrice || 0);
+            totalQty += barcodeQty;
+            currentStock += availableQty;
 
-                totalPurchasedQty += qty;
-                totalReceivedQty += receivedQty;
-                totalPendingQty += pendingQty;
-                totalCostValue += qty * costPrice;
-                totalSellingValue += qty * sellingPrice;
+            totalCostValue += availableQty * Number(barcode.costPrice || product.costPrice || 0);
+            totalSellingValue += availableQty * Number(barcode.sellingPrice || product.sellingPrice || 0);
 
-                data.push({
-                    purchaseId: purchase._id,
-                    invoiceNo: purchase.invoiceNo,
-                    invoiceDate: purchase.invoiceDate,
+            let totalStockText = "";
 
-                    productId: item.productId?._id || "",
-                    productName: item.productId?.name || product.name || "",
-                    brand: item.productId?.brand || item.brand || product.brand || "",
-
-                    barcode: barcode?.code || item.barcode || "",
-
-                    currentStock,
-
-                    mrp: item.mrp || 0,
-                    costPrice,
-                    sellingPrice,
-
-                    unit: item.unit || product.unit || "pcs",
-                    unitValue: item.unitValue || "",
-                    isCustomUnitValue: item.isCustomUnitValue || false,
-
-                    unitText: item.unitValue
-                        ? `${item.unitValue} ${item.unit || product.unit || "pcs"}`
-                        : `${item.unit || product.unit || "pcs"}`,
-
-
-
-                    kg: item.kg || "",
-
-                    purchasedQty: qty,
-                    receivedQty,
-                    pendingQty,
-
-                    status:
-                        currentStock <= 0
-                            ? "Out Of Stock"
-                            : currentStock <= 10
-                                ? "Low Stock"
-                                : "Available"
-                });
+            if (unit === "kg") {
+                totalStockText = `${formatQty(availableQty * unitValue)} kg`;
+            } else if (unit === "g") {
+                totalStockText = `${formatQty((availableQty * unitValue) / 1000)} kg`;
+            } else {
+                totalStockText = `${formatQty(availableQty)} pcs`;
             }
+
+            data.push({
+                productId: product._id,
+                productName: product.name,
+                brand: product.brand || "",
+
+                barcode: barcode.code,
+
+                totalQty: barcodeQty,
+                currentStock: availableQty,
+                soldQty: Math.max(Number((barcodeQty - availableQty).toFixed(2)), 0),
+
+                totalStockText,
+
+                mrp: barcode.mrp || product.mrp || 0,
+                costPrice: barcode.costPrice || product.costPrice || 0,
+                sellingPrice: barcode.sellingPrice || product.sellingPrice || 0,
+
+                unit,
+                unitValue,
+                unitText: `${unitValue} ${unit}`,
+
+                status:
+                    availableQty <= 0
+                        ? "Out Of Stock"
+                        : availableQty <= 10
+                            ? "Low Stock"
+                            : "Available"
+            });
         }
 
-        const latestItem = data[0] || null;
+        let productTotalStockText = "";
+
+        if (product.unit === "kg") {
+            productTotalStockText = `${formatQty(currentStock * Number(product.unitValue || 1))} kg`;
+        } else if (product.unit === "g") {
+            productTotalStockText = `${formatQty((currentStock * Number(product.unitValue || 1)) / 1000)} kg`;
+        } else {
+            productTotalStockText = `${formatQty(currentStock)} pcs`;
+        }
 
         return res.status(200).json({
             success: true,
@@ -445,31 +391,22 @@ exports.productStockById = async (req, res) => {
                 brand: product.brand || "",
 
                 unit: product.unit || "pcs",
+                unitValue: product.unitValue || 1,
 
-                unitValue: latestItem?.isCustomUnitValue
-                    ? latestItem.unitValue
-                    : "",
-
-                currentStock: latestItem?.isCustomUnitValue
-                    ? Number((data[0]?.currentStock || 0) / Number(latestItem.unitValue || 1))
-                    : Number(data[0]?.currentStock || 0),
-
-                totalStock:
-                    product.unit === "kg" || product.unit === "g"
-                        ? `${Number(data[0]?.currentStock || 0)} ${product.unit}`
-                        : `${Number(data[0]?.currentStock || 0)} pcs`,
+                currentStock: Number(currentStock.toFixed(2)),
+                totalStock: productTotalStockText,
 
                 status:
-                    Number(data[0]?.currentStock || 0) <= 0
+                    currentStock <= 0
                         ? "Out Of Stock"
-                        : Number(data[0]?.currentStock || 0) <= 10
+                        : currentStock <= 10
                             ? "Low Stock"
                             : "Available"
             },
             summary: {
-                totalPurchasedQty,
-                totalReceivedQty,
-                totalPendingQty,
+                totalQty: Number(totalQty.toFixed(2)),
+                currentStock: Number(currentStock.toFixed(2)),
+                soldQty: Math.max(Number((totalQty - currentStock).toFixed(2)), 0),
                 totalCostValue: Number(totalCostValue.toFixed(2)),
                 totalSellingValue: Number(totalSellingValue.toFixed(2)),
                 expectedProfit: Number((totalSellingValue - totalCostValue).toFixed(2))
@@ -501,7 +438,10 @@ exports.getTopSellingProducts = async (req, res) => {
             { $unwind: "$items" },
             {
                 $group: {
-                    _id: "$items.productId",
+                    _id: {
+                        productId: "$items.productId",
+                        barcode: "$items.barcode"
+                    },
                     productNameFromBill: { $first: "$items.productName" },
                     nameFromBill: { $first: "$items.name" },
                     brand: { $first: "$items.brand" },
@@ -514,7 +454,7 @@ exports.getTopSellingProducts = async (req, res) => {
             {
                 $lookup: {
                     from: "products",
-                    localField: "_id",
+                    localField: "_id.productId",
                     foreignField: "_id",
                     as: "product"
                 }
@@ -522,6 +462,36 @@ exports.getTopSellingProducts = async (req, res) => {
             {
                 $unwind: {
                     path: "$product",
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $lookup: {
+                    from: "barcodes",
+                    let: {
+                        productId: "$_id.productId",
+                        barcodeCode: "$_id.barcode",
+                        superAdminId: hierarchy.superAdminId
+                    },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $and: [
+                                        { $eq: ["$productId", "$$productId"] },
+                                        { $eq: ["$code", "$$barcodeCode"] },
+                                        { $eq: ["$superAdminId", "$$superAdminId"] }
+                                    ]
+                                }
+                            }
+                        }
+                    ],
+                    as: "barcodeData"
+                }
+            },
+            {
+                $unwind: {
+                    path: "$barcodeData",
                     preserveNullAndEmptyArrays: true
                 }
             },
@@ -536,7 +506,8 @@ exports.getTopSellingProducts = async (req, res) => {
             {
                 $project: {
                     _id: 0,
-                    productId: "$_id",
+                    productId: "$_id.productId",
+
                     productName: {
                         $ifNull: [
                             "$productNameFromBill",
@@ -548,14 +519,32 @@ exports.getTopSellingProducts = async (req, res) => {
                             }
                         ]
                     },
+
                     brand: {
                         $ifNull: ["$brand", "$product.brand"]
                     },
-                    barcode: 1,
 
-                    currentStock: { $ifNull: ["$product.stock", 0] },
-                    unit: { $ifNull: ["$product.unit", "pcs"] },
-                    unitValue: { $ifNull: ["$product.unitValue", 1] },
+                    barcode: "$_id.barcode",
+
+                    currentStock: {
+                        $ifNull: ["$barcodeData.availableQty", "$product.stock"]
+                    },
+
+                    barcodeStock: {
+                        $ifNull: ["$barcodeData.availableQty", 0]
+                    },
+
+                    productStock: {
+                        $ifNull: ["$product.stock", 0]
+                    },
+
+                    unit: {
+                        $ifNull: ["$barcodeData.unit", "$product.unit"]
+                    },
+
+                    unitValue: {
+                        $ifNull: ["$barcodeData.unitValue", "$product.unitValue"]
+                    },
 
                     totalQtySold: 1,
                     totalSalesAmount: { $round: ["$totalSalesAmount", 2] },
@@ -580,6 +569,7 @@ exports.getTopSellingProducts = async (req, res) => {
     }
 };
 
+
 exports.lowstockcheck = async (req, res) => {
     try {
         const hierarchy = attachHierarchy(req.user);
@@ -590,22 +580,41 @@ exports.lowstockcheck = async (req, res) => {
         })
             .populate(
                 "productId",
-                "name  stock categoryId gstRate lowStockQty unit unitValue"
+                "name brand stock categoryId gstRate lowStockQty unit unitValue"
             )
             .sort({ availableQty: 1 });
 
         let totalLowStockQty = 0;
 
+        const formatQty = (value) => {
+            const num = Number(value || 0);
+            return Number.isInteger(num)
+                ? String(num)
+                : String(Number(num.toFixed(2)));
+        };
+
         const filtered = barcodes.filter((barcode) => {
             const currentQty = Number(barcode.availableQty || 0);
             const lowStockQty = Number(barcode.productId?.lowStockQty || 10);
-
             return currentQty <= lowStockQty;
         });
 
         const data = filtered.map((barcode, index) => {
             const qty = Number(barcode.availableQty || 0);
             const lowStockQty = Number(barcode.productId?.lowStockQty || 10);
+
+            const unit = barcode.unit || barcode.productId?.unit || "pcs";
+            const unitValue = Number(barcode.unitValue || barcode.productId?.unitValue || 1);
+
+            let totalUnitText = "";
+
+            if (unit === "kg") {
+                totalUnitText = `${formatQty(qty * unitValue)} kg`;
+            } else if (unit === "g") {
+                totalUnitText = `${formatQty((qty * unitValue) / 1000)} kg`;
+            } else {
+                totalUnitText = `${formatQty(qty)} pcs`;
+            }
 
             totalLowStockQty += qty;
 
@@ -616,14 +625,14 @@ exports.lowstockcheck = async (req, res) => {
                 brand: barcode.productId?.brand || "",
 
                 barcode: barcode.code || "",
+
                 currentStock: qty,
                 lowStockQty,
                 totalProductStock: Number(barcode.productId?.stock || 0),
 
-                unit: barcode.unit || barcode.productId?.unit || "pcs",
-                unitValue: barcode.unitValue || barcode.productId?.unitValue || 1,
-                kg: barcode.kg || "",
-                totalUnitText: `${qty * Number(barcode.unitValue || barcode.productId?.unitValue || 1)} ${barcode.unit || barcode.productId?.unit || "pcs"}`,
+                unit,
+                unitValue,
+                totalUnitText,
 
                 mrp: barcode.mrp || 0,
                 costPrice: barcode.costPrice || 0,
@@ -673,37 +682,55 @@ exports.outofstockcheck = async (req, res) => {
             )
             .sort({ updatedAt: -1 });
 
-        const data = barcodes.map((barcode, index) => ({
-            sno: index + 1,
-            productId: barcode.productId?._id || "",
-            productName: barcode.productId?.name || "",
-            brand: barcode.productId?.brand || "",
+        const formatQty = (value) => {
+            const num = Number(value || 0);
+            return Number.isInteger(num)
+                ? String(num)
+                : String(Number(num.toFixed(2)));
+        };
 
-            barcode: barcode.code || "",
-            currentStock: Number(barcode.availableQty || 0),
-            totalProductStock: Number(barcode.productId?.stock || 0),
+        const data = barcodes.map((barcode, index) => {
+            const qty = Number(barcode.availableQty || 0);
+            const unit = barcode.unit || barcode.productId?.unit || "pcs";
+            const unitValue = Number(barcode.unitValue || barcode.productId?.unitValue || 1);
 
-            unit: barcode.unit || barcode.productId?.unit || "pcs",
-            unitValue: barcode.unitValue || barcode.productId?.unitValue || 1,
+            let totalUnitText = "";
 
-            kg: barcode.kg || "",
+            if (unit === "kg") {
+                totalUnitText = `${formatQty(qty * unitValue)} kg`;
+            } else if (unit === "g") {
+                totalUnitText = `${formatQty((qty * unitValue) / 1000)} kg`;
+            } else {
+                totalUnitText = `${formatQty(qty)} pcs`;
+            }
 
-            totalUnitText: `${Number(barcode.availableQty || 0) * Number(barcode.unitValue || barcode.productId?.unitValue || 1)} ${barcode.unit || barcode.productId?.unit || "pcs"}`,
+            return {
+                sno: index + 1,
+                productId: barcode.productId?._id || "",
+                productName: barcode.productId?.name || "",
+                brand: barcode.productId?.brand || "",
 
-            mrp: barcode.mrp || 0,
-            costPrice: barcode.costPrice || 0,
-            sellingPrice: barcode.sellingPrice || 0,
+                barcode: barcode.code || "",
+                currentStock: qty,
+                totalProductStock: Number(barcode.productId?.stock || 0),
 
+                unit,
+                unitValue,
+                totalUnitText,
 
+                mrp: barcode.mrp || 0,
+                costPrice: barcode.costPrice || 0,
+                sellingPrice: barcode.sellingPrice || 0,
 
-            gstRate: Number(
-                barcode.gstRate ||
-                barcode.productId?.gstRate ||
-                0
-            ),
+                gstRate: Number(
+                    barcode.gstRate ||
+                    barcode.productId?.gstRate ||
+                    0
+                ),
 
-            status: "Out Of Stock"
-        }));
+                status: "Out Of Stock"
+            };
+        });
 
         return res.status(200).json({
             success: true,
