@@ -82,6 +82,7 @@ exports.addCashOut = async (req, res) => {
     try {
         const hierarchy = attachHierarchy(req.user);
         const amount = Number(req.body.amount);
+        const note = String(req.body.note || "").trim();
 
         if (isNaN(amount) || amount <= 0) {
             return res.status(400).json({
@@ -108,8 +109,15 @@ exports.addCashOut = async (req, res) => {
             cashRegister.cashSales -
             cashRegister.cashOut;
 
-        await cashRegister.save();
+        cashRegister.cashOutHistory.push({
+            amount,
+            note,
+            date: new Date(),
+            createdBy: req.user.userId
+        });
 
+        await cashRegister.save();
+        
         res.json({
             success: true,
             message: "Cash out added successfully",
