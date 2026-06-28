@@ -36,6 +36,7 @@ exports.createBill = async (req, res) => {
             paymentMethod = "cash",
 
             payments = [],
+            paidAmount = 0,
             dueDate
         } = req.body;
 
@@ -270,7 +271,7 @@ exports.createBill = async (req, res) => {
                         discountPerItem = Number((normalSellingPrice - slabPrice).toFixed(2));
                         totalDiscount = Number((discountPerItem * qty).toFixed(2));
 
-                        price = slabPrice; // total calculation uses slab price
+                        price = slabPrice; 
 
                         appliedPriceLevel = "slab";
                         appliedSlab = {
@@ -427,18 +428,31 @@ exports.createBill = async (req, res) => {
 
         let finalPayments = [];
 
-        if (paymentStatus === "due") {
-            finalPayments = [];
+        if (paymentStatus === "due" || paymentStatus === "partial") {
+
+            if (payments.length > 0) {
+                finalPayments = payments;
+            } else if (Number(paidAmount) > 0) {
+                finalPayments = [
+                    {
+                        method: paymentMethod,
+                        amount: Number(paidAmount)
+                    }
+                ];
+            }
+
         } else if (paymentMethod === "split") {
+
             finalPayments = payments;
+
         } else {
+
             finalPayments = [
                 {
                     method: paymentMethod,
                     amount: grandTotal
                 }
             ];
-
         }
 
         const allowedMethods = ["cash", "upi", "card"];
@@ -500,10 +514,10 @@ exports.createBill = async (req, res) => {
                 });
             }
 
-            finalPayments = [];
-            pendingAmount = grandTotal;
+            pendingAmount = Number(
+                (grandTotal - totalPaid).toFixed(2)
+            );
         }
-
 
         const earnedPoints = Math.floor(grandTotal / 100);
 
@@ -528,6 +542,9 @@ exports.createBill = async (req, res) => {
             paymentMethod: finalPayments.length > 1 ? "split" : finalPayments[0]?.method || "due",
             paymentStatus,
             payments: finalPayments,
+
+            paidAmount: totalPaid,
+            pendingAmount,
 
             cashier: req.user.userId || req.user.id,
             createdBy: req.user.userId || req.user.id,

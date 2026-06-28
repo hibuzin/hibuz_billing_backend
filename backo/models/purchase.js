@@ -172,6 +172,12 @@ const purchaseSchema = new mongoose.Schema({
                 default: 0
             },
 
+            paymentStatus: {
+                type: String,
+                enum: ["paid", "partial", "pending"],
+                default: "pending"
+            },
+
             priceLevel: {
                 pricingType: {
                     type: String,

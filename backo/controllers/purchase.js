@@ -710,6 +710,11 @@ exports.createPurchase = async (req, res) => {
             data: {
                 _id: responsePurchase._id,
 
+                superAdminId: responsePurchase.superAdminId,
+                adminId: responsePurchase.adminId,
+                createdBy: responsePurchase.createdBy,
+
+
                 supplier: {
                     id: String(supplier._id),
 
@@ -736,7 +741,6 @@ exports.createPurchase = async (req, res) => {
                 totalAmount: round2(responsePurchase.totalAmount),
                 totalGrossAmount: round2(totalGrossAmount),
 
-                
                 paymentStatus: responsePurchase.paymentStatus,
 
                 supplierBillAmount: round2(responsePurchase.supplierBillAmount),
@@ -1113,7 +1117,18 @@ exports.getPurchases = async (req, res) => {
                 },
 
                 invoiceNo: purchase.invoiceNo,
-                invoiceDate: purchase.invoiceDate,
+
+                invoiceDate: purchase.invoiceDate
+                    ? new Date(purchase.invoiceDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
+
+                DueDate: purchase.DueDate
+                    ? new Date(purchase.DueDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
 
                 totalAmount: purchase.totalAmount || 0,
                 totalGrossAmount: Math.round((totalGrossAmount + Number.EPSILON) * 100) / 100,
@@ -1122,6 +1137,13 @@ exports.getPurchases = async (req, res) => {
                 supplierBillAmount: purchase.supplierBillAmount || 0,
                 paidAmount: purchase.paidAmount || 0,
                 balanceAmount: purchase.balanceAmount || 0,
+
+                DueDate: purchase.DueDate
+                    ? new Date(purchase.DueDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
+
                 paymentHistory: purchase.paymentHistory || [],
 
                 items: purchase.items.map((item) => ({
@@ -1244,8 +1266,17 @@ exports.getPurchaseById = async (req, res) => {
                 },
 
                 invoiceNo: purchase.invoiceNo,
+
                 invoiceDate: purchase.invoiceDate
-                    ? new Date(purchase.invoiceDate).toLocaleDateString("en-CA")
+                    ? new Date(purchase.invoiceDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
+
+                DueDate: purchase.DueDate
+                    ? new Date(purchase.DueDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
                     : "",
 
                 totalAmount: purchase.totalAmount || 0,
@@ -1256,6 +1287,14 @@ exports.getPurchaseById = async (req, res) => {
                 paidAmount: purchase.paidAmount || 0,
                 balanceAmount: purchase.balanceAmount || 0,
                 paymentStatus: purchase.paymentStatus || "",
+
+
+                DueDate: purchase.DueDate
+                    ? new Date(purchase.DueDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
+                    
                 paymentHistory: purchase.paymentHistory || [],
 
                 superAdminId: purchase.superAdminId || null,

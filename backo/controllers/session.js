@@ -144,7 +144,6 @@ exports.settleSession = async (req, res) => {
     }
 };
 
-
 exports.getCurrentSession = async (req, res) => {
     try {
         const hierarchy = attachHierarchy(req.user);
@@ -154,9 +153,7 @@ exports.getCurrentSession = async (req, res) => {
             cashier: userId,
             superAdminId: hierarchy.superAdminId,
             status: { $in: ["open", "settled"] }
-        })
-            .sort({ createdAt: -1 })
-            .populate("cashier", "CompanyName CompanyEmail role");
+        }).sort({ createdAt: -1 });
 
         if (!session) {
             return res.status(404).json({
@@ -164,6 +161,61 @@ exports.getCurrentSession = async (req, res) => {
                 message: "No active session found"
             });
         }
+
+        const bills = await Bill.find({
+            cashier: userId,
+            superAdminId: hierarchy.superAdminId,
+            createdAt: {
+                $gte: session.startTime,
+                $lte: new Date()
+            }
+        });
+
+        let totalSales = 0;
+        let cashSales = 0;
+        let upiSales = 0;
+        let cardSales = 0;
+        let dueSales = 0;
+
+        for (const bill of bills) {
+            const grandTotal = Number(bill.summary?.grandTotal || 0);
+            totalSales += grandTotal;
+
+            for (const pay of bill.payments || []) {
+                const amount = Number(pay.amount || 0);
+                const method = String(pay.method || "").toLowerCase();
+
+                if (method === "cash") cashSales += amount;
+                if (method === "upi") upiSales += amount;
+                if (method === "card") cardSales += amount;
+            }
+
+            if (bill.paymentStatus === "due" || bill.paymentStatus === "partial") {
+                const paidAmount = (bill.payments || []).reduce(
+                    (sum, p) => sum + Number(p.amount || 0),
+                    0
+                );
+
+                dueSales += grandTotal - paidAmount;
+            }
+        }
+
+        const expectedCash =
+            Number(session.openingAmount || 0) +
+            cashSales +
+            Number(session.cashIn || 0) -
+            Number(session.cashRefund || 0) -
+            Number(session.cashOut || 0);
+
+        session.totalSales = Number(totalSales.toFixed(2));
+        session.totalBills = bills.length;
+        session.cashSales = Number(cashSales.toFixed(2));
+        session.upiSales = Number(upiSales.toFixed(2));
+        session.cardSales = Number(cardSales.toFixed(2));
+        session.dueSales = Number(dueSales.toFixed(2));
+        session.expectedCash = Number(expectedCash.toFixed(2));
+
+        await session.save();
 
         return res.status(200).json({
             success: true,
@@ -182,7 +234,6 @@ exports.endSession = async (req, res) => {
     try {
         const { closingAmount } = req.body;
 
-        const hierarchy = attachHierarchy(req.user);
         const userId = req.user.userId || req.user.id;
 
         const session = await Session.findOne({
@@ -193,50 +244,13 @@ exports.endSession = async (req, res) => {
         if (!session) {
             return res.status(404).json({
                 success: false,
-                message: "No active session found"
+                message: "Please settle session before closing"
             });
         }
 
-        const endTime = new Date();
-
-        const bills = await Bill.find({
-            cashier: userId,
-            superAdminId: hierarchy.superAdminId,
-            createdAt: {
-                $gte: session.startTime,
-                $lte: endTime
-            }
-        });
-
-        let totalSales = 0;
-        let cashSales = 0;
-        let upiSales = 0;
-        let cardSales = 0;
-        let dueSales = 0;
-
-        for (const bill of bills) {
-            const grandTotal = Number(bill.summary?.grandTotal || 0);
-            totalSales += grandTotal;
-
-            for (const pay of bill.payments || []) {
-                const amount = Number(pay.amount || 0);
-
-                if (pay.method === "cash") cashSales += amount;
-                if (pay.method === "upi") upiSales += amount;
-                if (pay.method === "card") cardSales += amount;
-            }
-
-            if (bill.paymentStatus === "due" || bill.paymentStatus === "partial") {
-                const paidAmount = (bill.payments || []).reduce(
-                    (sum, p) => sum + Number(p.amount || 0),
-                    0
-                );
-
-                dueSales += grandTotal - paidAmount;
-            }
-        }
-
-
+        session.closingAmount = Number(closingAmount || session.cashCounted || 0);
+        session.endTime = new Date();
+        session.status = "closed";
 
         await session.save();
 
