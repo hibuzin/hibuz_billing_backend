@@ -7,10 +7,12 @@ exports.startSession = async (req, res) => {
     try {
         const { openingAmount } = req.body;
 
+        const hierarchy = attachHierarchy(req.user);
         const userId = req.user.userId || req.user.id;
 
         const alreadyOpen = await Session.findOne({
             cashier: userId,
+            superAdminId: hierarchy.superAdminId,
             status: "open"
         });
 
@@ -21,21 +23,140 @@ exports.startSession = async (req, res) => {
             });
         }
 
-        const session = await Session.create({
-            cashier: userId,
-            adminId: req.user.adminId || null,
-            superAdminId: req.user.superAdminId || null,
-            openingAmount: openingAmount || 0
+        const anyActiveSession = await Session.findOne({
+            superAdminId: hierarchy.superAdminId,
+            status: "open"
         });
 
-        res.status(201).json({
+        if (anyActiveSession) {
+            return res.status(400).json({
+                success: false,
+                message: "Another cashier session is already open. Please handover or close it first."
+            });
+        }
+
+        const session = await Session.create({
+            cashier: userId,
+            adminId: hierarchy.adminId || null,
+            superAdminId: hierarchy.superAdminId,
+            openingAmount: Number(openingAmount || 0)
+        });
+
+        return res.status(201).json({
             success: true,
             message: "Session started successfully",
             session
         });
 
     } catch (error) {
-        res.status(500).json({
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+exports.handoverSession = async (req, res) => {
+    try {
+        const { cashCounted, note } = req.body;
+
+        const hierarchy = attachHierarchy(req.user);
+        const userId = req.user.userId || req.user.id;
+
+        const session = await Session.findOne({
+            cashier: userId,
+            superAdminId: hierarchy.superAdminId,
+            status: "open"
+        });
+
+        if (!session) {
+            return res.status(404).json({
+                success: false,
+                message: "No open session found"
+            });
+        }
+
+        const bills = await Bill.find({
+            cashier: userId,
+            superAdminId: hierarchy.superAdminId,
+            createdAt: {
+                $gte: session.startTime,
+                $lte: new Date()
+            }
+        });
+
+        let totalSales = 0;
+        let cashSales = 0;
+        let upiSales = 0;
+        let cardSales = 0;
+        let dueSales = 0;
+
+        for (const bill of bills) {
+            const grandTotal = Number(bill.summary?.grandTotal || 0);
+            totalSales += grandTotal;
+
+            for (const pay of bill.payments || []) {
+                const method = String(pay.method || "").toLowerCase();
+                const amount = Number(pay.amount || 0);
+
+                if (method === "cash") cashSales += amount;
+                if (method === "upi") upiSales += amount;
+                if (method === "card") cardSales += amount;
+            }
+
+            if (bill.paymentStatus === "due" || bill.paymentStatus === "partial") {
+                const paidAmount = (bill.payments || []).reduce(
+                    (sum, p) => sum + Number(p.amount || 0),
+                    0
+                );
+
+                dueSales += grandTotal - paidAmount;
+            }
+        }
+
+        const counted = Number(cashCounted || 0);
+
+        const expectedCash =
+            Number(session.openingAmount || 0) +
+            cashSales +
+            Number(session.cashIn || 0) -
+            Number(session.cashRefund || 0) -
+            Number(session.cashOut || 0);
+
+        const difference = counted - expectedCash;
+
+        let settlementStatus = "matched";
+        if (difference < 0) settlementStatus = "short";
+        if (difference > 0) settlementStatus = "excess";
+
+        session.totalSales = Number(totalSales.toFixed(2));
+        session.totalBills = bills.length;
+        session.cashSales = Number(cashSales.toFixed(2));
+        session.upiSales = Number(upiSales.toFixed(2));
+        session.cardSales = Number(cardSales.toFixed(2));
+        session.dueSales = Number(dueSales.toFixed(2));
+
+        session.cashCounted = Number(counted.toFixed(2));
+        session.expectedCash = Number(expectedCash.toFixed(2));
+        session.difference = Number(difference.toFixed(2));
+        session.settlementStatus = settlementStatus;
+
+        session.closingAmount = counted;
+        session.settledAt = new Date();
+        session.endTime = new Date();
+        session.status = "closed";
+        session.handoverNote = note || "";
+
+        await session.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Session handed over successfully. Next cashier can login and start new session.",
+            session
+        });
+
+    } catch (error) {
+        return res.status(500).json({
             success: false,
             message: error.message
         });

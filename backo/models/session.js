@@ -122,6 +122,11 @@ const sessionSchema = new mongoose.Schema(
             default: 0
         },
 
+        handoverNote: {
+            type: String,
+            default: ""
+        },
+
         settlementStatus: {
             type: String,
             enum: ["not_settled", "matched", "short", "excess"],
