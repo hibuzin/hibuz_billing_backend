@@ -92,7 +92,6 @@ router.put(
     verifyToken,
     authorize("super_admin", "admin"),
     updatePurchase
-
 );
 
 

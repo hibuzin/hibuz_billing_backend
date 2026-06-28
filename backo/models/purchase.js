@@ -241,6 +241,12 @@ const purchaseSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+
+    DueDate: {
+        type: Date,
+        default: null
+    },
+
     balanceAmount: {
         type: Number,
         default: 0

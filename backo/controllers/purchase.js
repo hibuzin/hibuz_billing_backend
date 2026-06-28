@@ -213,7 +213,7 @@ exports.calculatePurchase = async (req, res) => {
 
 exports.createPurchase = async (req, res) => {
     try {
-        const { supplierId, items, invoiceDate, supplierBillAmount, paidAmount } = req.body;
+        const { supplierId, items, invoiceDate, supplierBillAmount, paidAmount, DueDate } = req.body;
 
         if (!supplierId || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({
@@ -245,6 +245,25 @@ exports.createPurchase = async (req, res) => {
             });
         }
 
+
+        let finalDueDate = null;
+
+        if (DueDate) {
+            finalDueDate = new Date(DueDate);
+
+            if (DueDate.includes(".")) {
+                const [day, month, year] = DueDate.split(".");
+                finalDueDate = new Date(`${year}-${month}-${day}`);
+            }
+
+            if (isNaN(finalDueDate.getTime())) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid due date format. Use YYYY-MM-DD or DD.MM.YYYY"
+                });
+            }
+        }
+
         const hierarchy = attachHierarchy(req.user);
 
         const invoiceNo = await getNextPurchaseInvoiceNo(hierarchy.superAdminId);
@@ -253,8 +272,6 @@ exports.createPurchase = async (req, res) => {
             _id: supplierId,
             superAdminId: hierarchy.superAdminId
         });
-
-
 
         if (!supplier) {
             return res.status(404).json({
@@ -648,6 +665,14 @@ exports.createPurchase = async (req, res) => {
             finalSupplierBillAmount - firstPaidAmount
         );
 
+        let paymentStatus = "pending";
+
+        if (balanceAmount === 0) {
+            paymentStatus = "paid";
+        } else if (firstPaidAmount > 0) {
+            paymentStatus = "partial";
+        }
+
         const purchase = await Purchase.create({
             supplierId,
             supplierName: supplier.supplierName || "",
@@ -660,6 +685,8 @@ exports.createPurchase = async (req, res) => {
             supplierBillAmount: finalSupplierBillAmount,
             paidAmount: firstPaidAmount,
             balanceAmount,
+            DueDate: balanceAmount > 0 ? finalDueDate : null,
+            paymentStatus,
 
             paymentHistory: firstPaidAmount > 0 ? [
                 {
@@ -701,8 +728,16 @@ exports.createPurchase = async (req, res) => {
                         .replace(/\//g, "-")
                     : "",
 
+                DueDate: responsePurchase.DueDate
+                    ? new Date(responsePurchase.DueDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
                 totalAmount: round2(responsePurchase.totalAmount),
                 totalGrossAmount: round2(totalGrossAmount),
+
+                
+                paymentStatus: responsePurchase.paymentStatus,
 
                 supplierBillAmount: round2(responsePurchase.supplierBillAmount),
                 paidAmount: round2(responsePurchase.paidAmount),

@@ -105,6 +105,7 @@ const billSchema = new mongoose.Schema({
         enum: ["cash", "upi", "card", "split", "due"],
         default: "cash"
     },
+    
     paymentStatus: {
         type: String,
         enum: ["paid", "partial", "due"],

@@ -117,7 +117,7 @@ exports.addCashOut = async (req, res) => {
         });
 
         await cashRegister.save();
-        
+
         res.json({
             success: true,
             message: "Cash out added successfully",
@@ -171,10 +171,26 @@ exports.closeCashRegister = async (req, res) => {
 
         await cashRegister.save();
 
+        const totalSalesAmount =
+            Number(cashRegister.cashSales || 0) +
+            Number(cashRegister.upiSales || 0) +
+            Number(cashRegister.cardSales || 0);
+
         res.json({
             success: true,
             message: "Cash register closed successfully",
-            data: cashRegister
+            data: {
+                ...cashRegister.toObject(),
+
+                totalSalesAmount: Number(totalSalesAmount.toFixed(2)),
+
+                salesSummary: {
+                    cashSales: Number(cashRegister.cashSales || 0),
+                    upiSales: Number(cashRegister.upiSales || 0),
+                    cardSales: Number(cashRegister.cardSales || 0),
+                    totalSalesAmount: Number(totalSalesAmount.toFixed(2))
+                }
+            }
         });
 
     } catch (error) {
