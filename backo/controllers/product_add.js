@@ -7,6 +7,21 @@ const category = require("../models/category");
 
 const Hsn = require("../models/hsn");
 
+const generateItemCode = async (superAdminId) => {
+    let code;
+    let exists = true;
+
+    while (exists) {
+        code = Math.floor(10000 + Math.random() * 90000).toString();
+
+        exists = await Product.findOne({
+            itemCode: code,
+            superAdminId
+        });
+    }
+
+    return code;
+};
 
 exports.productcreate = async (req, res) => {
 
@@ -35,6 +50,8 @@ exports.productcreate = async (req, res) => {
         }
 
         const hierarchy = attachHierarchy(req.user);
+
+        const itemCode = await generateItemCode(hierarchy.superAdminId);
 
         const cat = await category.findOne({
             _id: categoryId,
@@ -130,6 +147,7 @@ exports.productcreate = async (req, res) => {
 
         const product = await Product.create({
             name: String(name).trim(),
+            itemCode,
 
 
             description: description
@@ -273,6 +291,7 @@ exports.bulkProductCreate = async (req, res) => {
                 const item = products[i];
 
                 const name = item.name ? String(item.name).trim() : "";
+
                 const brand = item.brand ? String(item.brand).trim() : "";
                 const description = item.description ? String(item.description).trim() : "";
                 const categoryId = item.categoryId;
@@ -402,7 +421,11 @@ exports.bulkProductCreate = async (req, res) => {
                     }
                 }
 
+                const itemCode = await generateItemCode(hierarchy.superAdminId);
+
                 const product = await Product.create({
+
+                     itemCode,
                     name,
                     brand,
                     description,
@@ -530,8 +553,6 @@ exports.getproductMrps = async (req, res) => {
         const { productId } = req.params;
 
         const hierarchy = attachHierarchy(req.user);
-
-
 
         if (!product) {
             return res.status(404).json({

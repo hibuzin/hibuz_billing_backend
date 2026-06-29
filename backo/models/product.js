@@ -3,6 +3,12 @@ const mongoose = require("mongoose");
 
 const productSchema = new mongoose.Schema({
 
+    itemCode: {
+        type: String,
+        required: true,
+        trim: true
+    },
+
     name: { type: String, required: true },
 
     description: {
@@ -99,12 +105,6 @@ const productSchema = new mongoose.Schema({
         default: ""
     },
 
-    itemCode: {
-        type: String,
-        required: true,
-        trim: true
-    },
-
     gstRate: {
         type: Number,
         default: 0
@@ -145,6 +145,11 @@ const productSchema = new mongoose.Schema({
         required: true
     }
 }, { timestamps: true });
+
+productSchema.index(
+    { superAdminId: 1, itemCode: 1 },
+    { unique: true }
+);
 
 module.exports =
     mongoose.models.Product ||
