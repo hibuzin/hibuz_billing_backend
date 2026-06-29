@@ -127,18 +127,18 @@ exports.calculatePurchase = async (req, res) => {
             totalTaxAmount = round2(totalTaxAmount + taxAmount);
             totalAmount = round2(totalAmount + totalCostWithGST);
 
-            const Rate = totalStockQty > 0
-                ? round2(amount / totalStockQty)
-                : 0;
+            const Rate = isGstIncluded
+                ? round2(netcost * 100 / (100 + taxPercentage))
+                : round2(netcost);
 
-            const profitAmount = round2(sellingPrice - netcost);
+            const profitAmount = round2(sellingPrice - Rate);
 
             const profitPercent = sellingPrice > 0
                 ? round2((profitAmount / sellingPrice) * 100)
                 : 0;
 
-            const roiPercent = netcost > 0
-                ? round2((profitAmount / netcost) * 100)
+            const roiPercent = Rate > 0
+                ? round2((profitAmount / Rate) * 100)
                 : 0;
 
             return {

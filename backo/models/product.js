@@ -33,11 +33,11 @@ const productSchema = new mongoose.Schema({
     unit: {
         type: String,
         enum: ["pcs", "kg", "g"]
-        
+
     },
     unitValue: {
         type: Number
-        
+
     },
 
     costPrice: {
@@ -97,6 +97,12 @@ const productSchema = new mongoose.Schema({
     hsnCode: {
         type: String,
         default: ""
+    },
+
+    itemCode: {
+        type: String,
+        required: true,
+        trim: true
     },
 
     gstRate: {
