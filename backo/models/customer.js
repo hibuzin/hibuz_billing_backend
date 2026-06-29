@@ -46,6 +46,24 @@ const customerSchema = new mongoose.Schema(
             trim: true
         },
 
+        state: {
+            type: String,
+            default: "",
+            trim: true
+        },
+
+        city: {
+            type: String,
+            default: "",
+            trim: true
+        },
+
+        pincode: {
+            type: String,
+            default: "",
+            trim: true
+        },
+
         totalPurchases: {
             type: Number,
             default: 0

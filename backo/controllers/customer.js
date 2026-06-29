@@ -24,7 +24,7 @@ const getNextCustomerId = async () => {
 
 exports.createCustomer = async (req, res) => {
     try {
-        const { name, phone, email, address, gstNumber, bankDetails } = req.body;
+        const { name, phone, email, address, state, city, pincode, gstNumber, bankDetails } = req.body;
         const { userId, role, superAdminId, adminId } = req.user;
 
         if (!name || !phone) {
@@ -77,6 +77,9 @@ exports.createCustomer = async (req, res) => {
             phone: cleanPhone,
             email,
             address,
+            state: state || "",
+            city: city || "",
+            pincode: pincode || "",
 
             gstNumber: gstNumber
                 ? gstNumber.trim().toUpperCase()
@@ -396,7 +399,7 @@ exports.getCustomerById = async (req, res) => {
 exports.updateCustomer = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, phone, email, address, gstNumber, bankDetails } = req.body;
+        const { name, phone, email, address, state, city, pincode, gstNumber, bankDetails } = req.body;
 
         const hierarchy = attachHierarchy(req.user);
 
@@ -423,6 +426,9 @@ exports.updateCustomer = async (req, res) => {
         if (phone) customer.phone = phone.trim();
         if (email) customer.email = email.toLowerCase();
         if (address !== undefined) customer.address = address;
+        if (state !== undefined) customer.state = state;
+        if (city !== undefined) customer.city = city;
+        if (pincode !== undefined) customer.pincode = pincode;
 
         if (gstNumber !== undefined) {
             customer.gstNumber = gstNumber

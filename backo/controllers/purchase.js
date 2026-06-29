@@ -1294,7 +1294,7 @@ exports.getPurchaseById = async (req, res) => {
                         .toLocaleDateString("en-GB")
                         .replace(/\//g, "-")
                     : "",
-                    
+
                 paymentHistory: purchase.paymentHistory || [],
 
                 superAdminId: purchase.superAdminId || null,
@@ -1473,7 +1473,10 @@ exports.updatePurchase = async (req, res) => {
             supplierId,
             invoiceNo,
             invoiceDate,
-            items
+            items,
+            supplierBillAmount,
+            paidAmount,
+            DueDate
         } = req.body;
 
         const round2 = (num) =>
@@ -1578,6 +1581,16 @@ exports.updatePurchase = async (req, res) => {
             const netAmount = round2(netcost * qty);
 
             const mrp = Number(item.mrp);
+
+            const productMrp = Number(product.mrp || 0);
+
+            if (mrp !== productMrp) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Selected MRP not found in product"
+                });
+            }
+
             const sellingPrice = Number(item.sellingPrice || mrp);
 
             if (isNaN(qty) || qty <= 0) {
@@ -1624,7 +1637,10 @@ exports.updatePurchase = async (req, res) => {
                 });
             }
 
-            if (isNaN(purchaseUnitValue) || purchaseUnitValue <= 0) {
+            if (
+                qtyType === "unit" &&
+                (isNaN(purchaseUnitValue) || purchaseUnitValue <= 0)
+            ) {
                 return res.status(400).json({
                     success: false,
                     message: "Valid unitValue is required"
@@ -1748,7 +1764,7 @@ exports.updatePurchase = async (req, res) => {
                 }
             );
 
-            // 3. Add new barcode stock
+
             if (barcode) {
                 await Barcode.findOneAndUpdate(
                     {
@@ -1783,6 +1799,33 @@ exports.updatePurchase = async (req, res) => {
                     {
                         upsert: true,
                         new: true
+                    }
+                );
+            }
+
+            if (item.priceLevel) {
+                await PriceLevel.findOneAndUpdate(
+                    {
+                        productId: product._id,
+                        superAdminId: hierarchy.superAdminId
+                    },
+                    {
+                        productId: product._id,
+                        pricingType: item.priceLevel.pricingType,
+                        manualPrice: item.priceLevel.manualPrice || 0,
+                        autoPricing: item.priceLevel.autoPricing || {
+                            baseOn: "netcost",
+                            profitPercent: 0
+                        },
+                        slabs: item.priceLevel.slabs || [],
+                        ...hierarchy,
+                        createdBy: req.user.userId,
+                        isActive: true
+                    },
+                    {
+                        upsert: true,
+                        new: true,
+                        runValidators: true
                     }
                 );
             }
@@ -1865,6 +1908,32 @@ exports.updatePurchase = async (req, res) => {
         purchase.invoiceDate = invoiceDate || purchase.invoiceDate;
         purchase.items = processedItems;
         purchase.totalAmount = totalAmount;
+
+        const finalSupplierBillAmount = Number(supplierBillAmount || totalAmount);
+        const finalPaidAmount = Number(paidAmount ?? purchase.paidAmount ?? 0);
+
+        if (finalPaidAmount > finalSupplierBillAmount) {
+            return res.status(400).json({
+                success: false,
+                message: "Paid amount cannot be greater than supplier bill amount"
+            });
+        }
+
+        const balanceAmount = round2(finalSupplierBillAmount - finalPaidAmount);
+
+        let paymentStatus = "pending";
+
+        if (balanceAmount === 0) {
+            paymentStatus = "paid";
+        } else if (finalPaidAmount > 0) {
+            paymentStatus = "partial";
+        }
+
+        purchase.supplierBillAmount = finalSupplierBillAmount;
+        purchase.paidAmount = finalPaidAmount;
+        purchase.balanceAmount = balanceAmount;
+        purchase.paymentStatus = paymentStatus;
+        purchase.DueDate = balanceAmount > 0 ? DueDate || purchase.DueDate : null;
 
         Object.assign(purchase, supplierData);
 

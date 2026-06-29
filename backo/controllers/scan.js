@@ -56,8 +56,9 @@ exports.scanProductForPurchase = async (req, res) => {
 
                 kg: barcode.kg || "",
 
-                qty: barcode.qty || 0,
-                availableQty: barcode.availableQty || 0,
+                stock: product.stock || 0,
+                unit: barcode.unit || product.unit || "pcs",
+                unitValue: barcode.unitValue || product.unitValue || 1,
 
 
                 mrp: barcode.mrp || product.mrp || 0,
