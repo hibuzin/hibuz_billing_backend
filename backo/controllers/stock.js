@@ -202,6 +202,7 @@ exports.getproductsearchstock = async (req, res) => {
             superAdminId: hierarchy.superAdminId,
             $or: [
                 { name: { $regex: searchText, $options: "i" } },
+                { itemCode: { $regex: searchText, $options: "i" } },
                 { brand: { $regex: searchText, $options: "i" } }
             ]
         });
@@ -215,7 +216,11 @@ exports.getproductsearchstock = async (req, res) => {
                 { code: { $regex: searchText, $options: "i" } }
             ]
         })
-            .populate("productId", "name brand stock unit unitValue mrp costPrice sellingPrice")
+            .populate(
+                "productId",
+                "name itemCode brand stock unit unitValue mrp costPrice sellingPrice"
+            )
+            
             .sort({ createdAt: -1 });
 
         const data = [];
@@ -229,6 +234,7 @@ exports.getproductsearchstock = async (req, res) => {
 
             data.push({
                 productId: product._id,
+                itemCode: product.itemCode || "",
                 productName: product.name || "",
                 brand: product.brand || "",
 

@@ -425,7 +425,7 @@ exports.bulkProductCreate = async (req, res) => {
 
                 const product = await Product.create({
 
-                     itemCode,
+                    itemCode,
                     name,
                     brand,
                     description,
@@ -680,6 +680,7 @@ exports.searchProducts = async (req, res) => {
             isActive: { $ne: false },
             $or: [
                 { name: { $regex: search, $options: "i" } },
+                { itemCode: { $regex: search, $options: "i" } },
                 { brand: { $regex: search, $options: "i" } },
                 { hsnCode: { $regex: search, $options: "i" } }
             ]
@@ -691,8 +692,8 @@ exports.searchProducts = async (req, res) => {
         const data = products.map((product) => ({
             productId: product._id,
             productName: product.name || "",
-
-
+            itemCode: product.itemCode || "",
+            
             stock: Number(product.stock || 0),
             reservedStock: Number(product.reservedStock || 0),
 
