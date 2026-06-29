@@ -64,6 +64,13 @@ const customerSchema = new mongoose.Schema(
             trim: true
         },
 
+        panNumber: {
+            type: String,
+            default: "",
+            trim: true,
+            uppercase: true
+        },
+
         totalPurchases: {
             type: Number,
             default: 0

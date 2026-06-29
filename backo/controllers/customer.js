@@ -24,7 +24,7 @@ const getNextCustomerId = async () => {
 
 exports.createCustomer = async (req, res) => {
     try {
-        const { name, phone, email, address, state, city, pincode, gstNumber, bankDetails } = req.body;
+        const { name, phone, email, address, state, city, pincode, gstNumber, panNumber, bankDetails } = req.body;
         const { userId, role, superAdminId, adminId } = req.user;
 
         if (!name || !phone) {
@@ -83,6 +83,10 @@ exports.createCustomer = async (req, res) => {
 
             gstNumber: gstNumber
                 ? gstNumber.trim().toUpperCase()
+                : "",
+
+            panNumber: panNumber
+                ? panNumber.trim().toUpperCase()
                 : "",
 
             bankDetails: {
@@ -399,7 +403,7 @@ exports.getCustomerById = async (req, res) => {
 exports.updateCustomer = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, phone, email, address, state, city, pincode, gstNumber, bankDetails } = req.body;
+        const { name, phone, email, address, state, city, pincode, gstNumber, panNumber, bankDetails } = req.body;
 
         const hierarchy = attachHierarchy(req.user);
 
@@ -433,6 +437,12 @@ exports.updateCustomer = async (req, res) => {
         if (gstNumber !== undefined) {
             customer.gstNumber = gstNumber
                 ? gstNumber.trim().toUpperCase()
+                : "";
+        }
+
+        if (panNumber !== undefined) {
+            customer.panNumber = panNumber
+                ? panNumber.trim().toUpperCase()
                 : "";
         }
 

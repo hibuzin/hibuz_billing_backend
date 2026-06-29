@@ -35,6 +35,7 @@ exports.addsupplier = async (req, res) => {
             pincode,
             bankDetails
         } = req.body;
+        
 
         if (!supplierName || !mobile) {
             return res.status(400).json({
