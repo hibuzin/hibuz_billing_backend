@@ -421,6 +421,56 @@ exports.bulkProductCreate = async (req, res) => {
                 }
 
                 const processedMrp = Number(item.mrp || 0);
+
+                const allowedProductTypes = ["normal", "bulk", "repack"];
+
+                const finalProductType = item.productType
+                    ? String(item.productType).trim().toLowerCase()
+                    : "normal";
+
+                if (!allowedProductTypes.includes(finalProductType)) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Product type must be normal, bulk or repack"
+                    });
+                    continue;
+                }
+
+                let finalParentProductId = null;
+
+                if (finalProductType === "repack") {
+                    if (!item.parentProductId) {
+                        errors.push({
+                            row: i + 1,
+                            name,
+                            barcode: barcodeCode,
+                            message: "Parent bulk product required for repack product"
+                        });
+                        continue;
+                    }
+
+                    const parentProduct = await Product.findOne({
+                        _id: item.parentProductId,
+                        productType: "bulk",
+                        superAdminId: hierarchy.superAdminId
+                    });
+
+                    if (!parentProduct) {
+                        errors.push({
+                            row: i + 1,
+                            name,
+                            barcode: barcodeCode,
+                            message: "Parent bulk product not found"
+                        });
+                        continue;
+                    }
+
+                    finalParentProductId = item.parentProductId;
+                }
+
+
                 const processedCostPrice = Number(item.costPrice || 0);
                 const processedSellingPrice = Number(item.sellingPrice || 0);
                 const processedLowStockQty = Number(item.lowStockQty || 10);
@@ -472,6 +522,9 @@ exports.bulkProductCreate = async (req, res) => {
                     name,
                     brand,
                     description,
+
+                    productType: finalProductType,
+                    parentProductId: finalParentProductId,
 
                     stock: 0,
                     lowStockQty: processedLowStockQty,

@@ -81,7 +81,8 @@ exports.startSession = async (req, res) => {
 
 exports.handoverSession = async (req, res) => {
     try {
-        const { cashCounted, note } = req.body;
+
+        const { cashCounted, closingDenomination = {}, note } = req.body;
 
         const hierarchy = attachHierarchy(req.user);
         const userId = req.user.userId || req.user.id;
@@ -137,7 +138,27 @@ exports.handoverSession = async (req, res) => {
             }
         }
 
-        const counted = Number(cashCounted || 0);
+        const d = closingDenomination || {};
+
+        const denominationAmount =
+            (Number(d.coin1 || 0) * 1) +
+            (Number(d.coin2 || 0) * 2) +
+            (Number(d.coin5 || 0) * 5) +
+            (Number(d.coin10 || 0) * 10) +
+            (Number(d.coin20 || 0) * 20) +
+            (Number(d.note10 || 0) * 10) +
+            (Number(d.note20 || 0) * 20) +
+            (Number(d.note50 || 0) * 50) +
+            (Number(d.note100 || 0) * 100) +
+            (Number(d.note200 || 0) * 200) +
+            (Number(d.note500 || 0) * 500);
+
+        const hasDenomination = Object.keys(d).length > 0;
+
+        const counted = hasDenomination
+            ? denominationAmount
+            : Number(cashCounted || 0);
+
 
         const expectedCash =
             Number(session.openingAmount || 0) +
@@ -169,6 +190,10 @@ exports.handoverSession = async (req, res) => {
         session.endTime = new Date();
         session.status = "closed";
         session.handoverNote = note || "";
+
+        session.closingDenomination = closingDenomination;
+        session.settledBy = userId;
+        session.closedBy = userId;
 
         await session.save();
 

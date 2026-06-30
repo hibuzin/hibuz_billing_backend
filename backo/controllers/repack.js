@@ -20,17 +20,14 @@ const convertToKg = (unit, unitValue, qty) => {
     throw new Error("Only kg and g units are allowed in repack");
 };
 
+
 exports.createRepack = async (req, res) => {
     const session = await mongoose.startSession();
 
     try {
         session.startTransaction();
 
-        const {
-            fromProductId,
-            outputs,
-            note
-        } = req.body;
+        const { fromProductId, outputs, note } = req.body;
 
         if (!fromProductId) {
             await session.abortTransaction();
@@ -61,6 +58,10 @@ exports.createRepack = async (req, res) => {
 
         if (!fromProduct) {
             throw new Error("From product not found");
+        }
+
+        if (fromProduct.productType !== "bulk") {
+            throw new Error("From product must be bulk product");
         }
 
         const fromUnitValue = Number(fromProduct.unitValue || 1);
@@ -94,6 +95,17 @@ exports.createRepack = async (req, res) => {
                 throw new Error("Output product not found");
             }
 
+            if (toProduct.productType !== "repack") {
+                throw new Error("Output product must be repack product");
+            }
+
+            if (
+                toProduct.parentProductId &&
+                String(toProduct.parentProductId) !== String(fromProductId)
+            ) {
+                throw new Error("Output repack product parent does not match from bulk product");
+            }
+
             const toQty = Number(item.toQty);
 
             if (isNaN(toQty) || toQty <= 0) {
@@ -116,7 +128,7 @@ exports.createRepack = async (req, res) => {
             }
 
             if (!finalToBarcode) {
-                throw new Error("Output barcode is required or no barcode found for output product");
+                throw new Error(`Barcode not found for output product: ${toProduct.name}`);
             }
 
             finalOutputs.push({
@@ -150,11 +162,11 @@ exports.createRepack = async (req, res) => {
             deductQty = (totalOutputKg * 1000) / fromUnitValue;
         }
 
-        if (fromProduct.stock < deductQty) {
+        if (Number(fromProduct.stock || 0) < deductQty) {
             throw new Error("Not enough product stock");
         }
 
-        if (fromBarcodeData.availableQty < deductQty) {
+        if (Number(fromBarcodeData.availableQty || 0) < deductQty) {
             throw new Error("Not enough barcode stock");
         }
 
@@ -164,7 +176,9 @@ exports.createRepack = async (req, res) => {
                 superAdminId: hierarchy.superAdminId
             },
             {
-                $inc: { stock: -deductQty }
+                $inc: {
+                    stock: -deductQty
+                }
             },
             { session }
         );
@@ -191,7 +205,9 @@ exports.createRepack = async (req, res) => {
                     superAdminId: hierarchy.superAdminId
                 },
                 {
-                    $inc: { stock: Number(item.toQty) }
+                    $inc: {
+                        stock: Number(item.toQty)
+                    }
                 },
                 { session }
             );
@@ -207,13 +223,13 @@ exports.createRepack = async (req, res) => {
                         productId: item.toProductId,
                         code: String(item.toBarcode).trim(),
 
-                        mrp: toProduct.mrp || 0,
-                        sellingPrice: toProduct.sellingPrice || 0,
-                        costPrice: toProduct.costPrice || 0,
-                        gstRate: toProduct.gstRate || 0,
+                        mrp: Number(toProduct.mrp || 0),
+                        sellingPrice: Number(toProduct.sellingPrice || 0),
+                        costPrice: Number(toProduct.costPrice || 0),
+                        gstRate: Number(toProduct.gstRate || 0),
 
                         unit: toProduct.unit,
-                        unitValue: toProduct.unitValue,
+                        unitValue: Number(toProduct.unitValue || 1),
 
                         isSold: false,
 
@@ -240,8 +256,10 @@ exports.createRepack = async (req, res) => {
 
                     fromProductId,
                     fromBarcode: String(fromBarcode).trim(),
+
                     inputKg: totalOutputKg,
                     deductQty,
+
                     fromUnit: fromProduct.unit,
                     fromUnitValue,
 
@@ -250,7 +268,7 @@ exports.createRepack = async (req, res) => {
                         toBarcode: String(item.toBarcode).trim(),
                         toQty: Number(item.toQty),
                         toUnit: item.product.unit,
-                        toUnitValue: item.product.unitValue
+                        toUnitValue: Number(item.product.unitValue || 1)
                     })),
 
                     note: note || "",
@@ -279,6 +297,57 @@ exports.createRepack = async (req, res) => {
             success: false,
             message: "Server error",
             error: err.message
+        });
+    }
+};
+
+
+exports.getRepackProductsByBulk = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+        const { bulkProductId } = req.params;
+
+        const bulkProduct = await Product.findOne({
+            _id: bulkProductId,
+            productType: "bulk",
+            superAdminId: hierarchy.superAdminId
+        });
+
+        if (!bulkProduct) {
+            return res.status(404).json({
+                success: false,
+                message: "Bulk product not found"
+            });
+        }
+
+        const repackProducts = await Product.find({
+            parentProductId: bulkProductId,
+            productType: "repack",
+            superAdminId: hierarchy.superAdminId
+        })
+            .populate("categoryId", "name")
+            .populate("parentProductId", "name productType unit unitValue stock")
+            .sort({ unitValue: 1 });
+
+        return res.status(200).json({
+            success: true,
+            message: "Repack products fetched successfully",
+            bulkProduct: {
+                _id: bulkProduct._id,
+                name: bulkProduct.name,
+                unit: bulkProduct.unit,
+                unitValue: bulkProduct.unitValue,
+                stock: bulkProduct.stock
+            },
+            count: repackProducts.length,
+            data: repackProducts
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message
         });
     }
 };
