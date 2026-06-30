@@ -15,6 +15,7 @@ const {
     productcreate,
     bulkProductCreate,
     getproductMrps,
+    getProductsByType,
     allProducts,
     searchProducts,
     searchProductsByCategory,
@@ -41,8 +42,13 @@ router.get(
     authorize("super_admin", "admin", "cashier"),
     getproductMrps,
 );
-    
-    
+
+router.get(
+    "/product-type",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    getProductsByType,
+);
 
 
 router.get(

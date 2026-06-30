@@ -5,7 +5,7 @@ const { attachHierarchy } = require("../utils/hierarchy");
 
 exports.startSession = async (req, res) => {
     try {
-        const { openingAmount } = req.body;
+        const { openingAmount, openingDenomination = {} } = req.body;
 
         const hierarchy = attachHierarchy(req.user);
         const userId = req.user.userId || req.user.id;
@@ -35,11 +35,34 @@ exports.startSession = async (req, res) => {
             });
         }
 
+        const d = openingDenomination || {};
+
+        const denominationAmount =
+            (Number(d.coin1 || 0) * 1) +
+            (Number(d.coin2 || 0) * 2) +
+            (Number(d.coin5 || 0) * 5) +
+            (Number(d.coin10 || 0) * 10) +
+            (Number(d.coin20 || 0) * 20) +
+            (Number(d.note10 || 0) * 10) +
+            (Number(d.note20 || 0) * 20) +
+            (Number(d.note50 || 0) * 50) +
+            (Number(d.note100 || 0) * 100) +
+            (Number(d.note200 || 0) * 200) +
+            (Number(d.note500 || 0) * 500);
+
+        const hasDenomination = Object.keys(d).length > 0;
+
+        const finalOpeningAmount = hasDenomination
+            ? denominationAmount
+            : Number(openingAmount || 0);
+
         const session = await Session.create({
             cashier: userId,
             adminId: hierarchy.adminId || null,
             superAdminId: hierarchy.superAdminId,
-            openingAmount: Number(openingAmount || 0)
+            openingAmount: finalOpeningAmount,
+            openingDenomination,
+            expectedCash: finalOpeningAmount
         });
 
         return res.status(201).json({
@@ -166,13 +189,14 @@ exports.handoverSession = async (req, res) => {
 
 exports.settleSession = async (req, res) => {
     try {
-        const { cashCounted } = req.body;
+        const { cashCounted, closingDenomination = {} } = req.body;
 
         const hierarchy = attachHierarchy(req.user);
         const userId = req.user.userId || req.user.id;
 
         const session = await Session.findOne({
             cashier: userId,
+            superAdminId: hierarchy.superAdminId,
             status: "open"
         });
 
@@ -220,7 +244,26 @@ exports.settleSession = async (req, res) => {
             }
         }
 
-        const counted = Number(cashCounted || 0);
+        const d = closingDenomination || {};
+
+        const denominationAmount =
+            (Number(d.coin1 || 0) * 1) +
+            (Number(d.coin2 || 0) * 2) +
+            (Number(d.coin5 || 0) * 5) +
+            (Number(d.coin10 || 0) * 10) +
+            (Number(d.coin20 || 0) * 20) +
+            (Number(d.note10 || 0) * 10) +
+            (Number(d.note20 || 0) * 20) +
+            (Number(d.note50 || 0) * 50) +
+            (Number(d.note100 || 0) * 100) +
+            (Number(d.note200 || 0) * 200) +
+            (Number(d.note500 || 0) * 500);
+
+        const hasDenomination = Object.keys(d).length > 0;
+
+        const counted = hasDenomination
+            ? denominationAmount
+            : Number(cashCounted || 0);
 
         const expectedCash =
             Number(session.openingAmount || 0) +
@@ -232,6 +275,7 @@ exports.settleSession = async (req, res) => {
         const difference = counted - expectedCash;
 
         let settlementStatus = "matched";
+
         if (difference < 0) settlementStatus = "short";
         if (difference > 0) settlementStatus = "excess";
 
@@ -242,10 +286,12 @@ exports.settleSession = async (req, res) => {
         session.cardSales = Number(cardSales.toFixed(2));
         session.dueSales = Number(dueSales.toFixed(2));
 
+        session.closingDenomination = closingDenomination;
         session.cashCounted = Number(counted.toFixed(2));
         session.expectedCash = Number(expectedCash.toFixed(2));
         session.difference = Number(difference.toFixed(2));
         session.settlementStatus = settlementStatus;
+        session.settledBy = userId;
         session.settledAt = new Date();
         session.status = "settled";
 
@@ -264,6 +310,7 @@ exports.settleSession = async (req, res) => {
         });
     }
 };
+
 
 exports.getCurrentSession = async (req, res) => {
     try {
@@ -340,7 +387,14 @@ exports.getCurrentSession = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            session
+            session: {
+                ...session.toObject(),
+
+                denomination: {
+                    openingDenomination: session.openingDenomination || {},
+                    closingDenomination: session.closingDenomination || {}
+                }
+            }
         });
 
     } catch (error) {
@@ -350,6 +404,7 @@ exports.getCurrentSession = async (req, res) => {
         });
     }
 };
+
 
 exports.endSession = async (req, res) => {
     try {
@@ -369,7 +424,7 @@ exports.endSession = async (req, res) => {
             });
         }
 
-        session.closingAmount = Number(closingAmount || session.cashCounted || 0);
+        session.closingAmount = Number(session.cashCounted || 0);
         session.endTime = new Date();
         session.status = "closed";
 

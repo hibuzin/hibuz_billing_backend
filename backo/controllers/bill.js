@@ -32,6 +32,9 @@ exports.createBill = async (req, res) => {
             redeemPoints = 0,
             priceLevel = "normal",
 
+            discountPercent,
+            discountAmount,
+
             paymentStatus = "paid",
             paymentMethod = "cash",
 
@@ -53,9 +56,10 @@ exports.createBill = async (req, res) => {
         const hierarchy = attachHierarchy(req.user);
 
         const invoiceNo = await getNextInvoiceNo(hierarchy.superAdminId);
-
         let subTotal = 0;
         let totalGST = 0;
+        let totalItemDiscount = 0;
+
         const items = [];
 
         const gstAuditItems = [];
@@ -121,7 +125,18 @@ exports.createBill = async (req, res) => {
 
             const gstRate = Number(barcode.gstRate || product.gstRate || 0);
 
-            const finalPrice = Number((price * qty).toFixed(2));
+            const grossAmount = Number((price * qty).toFixed(2));
+
+            const discountAmount = Number(
+                ((grossAmount * discountPercent) / 100).toFixed(2)
+            );
+
+            totalItemDiscount += discountAmount;
+
+            const finalPrice = Number(
+                (grossAmount - discountAmount).toFixed(2)
+            );
+
             const taxableAmount = Number((finalPrice / (1 + gstRate / 100)).toFixed(2));
             const gstAmount = Number((finalPrice - taxableAmount).toFixed(2));
 
@@ -134,6 +149,12 @@ exports.createBill = async (req, res) => {
                 barcode: barcode.code,
                 productName: product.name || "",
                 name: product.name || "",
+
+                totalAmount: grossAmount,
+                discountPercent,
+                discountAmount,
+                finalPrice,
+
                 unit: barcode.unit || product.unit || "pcs",
                 unitValue: barcode.unitValue || product.unitValue || 1,
                 unitText: `${barcode.unitValue || product.unitValue || 1} ${barcode.unit || product.unit || "pcs"}`,
@@ -145,8 +166,7 @@ exports.createBill = async (req, res) => {
                 appliedPriceLevel,
                 appliedSlab,
                 gstRate,
-                gstAmount,
-                finalPrice
+                gstAmount
             });
 
             if (gstRate > 0 && gstAmount > 0) {
@@ -175,6 +195,8 @@ exports.createBill = async (req, res) => {
 
         for (const billItem of billItems) {
             const qty = Number(billItem.qty || 1);
+
+            const discountPercent = Number(billItem.discountPercent || 0);
 
             if (isNaN(qty) || qty <= 0) {
                 return res.status(400).json({
@@ -271,7 +293,7 @@ exports.createBill = async (req, res) => {
                         discountPerItem = Number((normalSellingPrice - slabPrice).toFixed(2));
                         totalDiscount = Number((discountPerItem * qty).toFixed(2));
 
-                        price = slabPrice; 
+                        price = slabPrice;
 
                         appliedPriceLevel = "slab";
                         appliedSlab = {
@@ -297,7 +319,18 @@ exports.createBill = async (req, res) => {
 
             }
 
-            const finalPrice = Number((price * qty).toFixed(2));
+            const grossAmount = Number((price * qty).toFixed(2));
+
+            const discountAmount = Number(
+                ((grossAmount * discountPercent) / 100).toFixed(2)
+            );
+
+            totalItemDiscount += discountAmount;
+
+            const finalPrice = Number(
+                (grossAmount - discountAmount).toFixed(2)
+            );
+
             const taxableAmount = Number((finalPrice / (1 + gstRate / 100)).toFixed(2));
             const gstAmount = Number((finalPrice - taxableAmount).toFixed(2));
 
@@ -313,6 +346,10 @@ exports.createBill = async (req, res) => {
                 barcodeId: barcode._id,
                 barcode: barcode.code,
 
+                totalAmount: grossAmount,
+                discountPercent,
+                discountAmount,
+                finalPrice,
 
                 productName: product.name || "",
                 name: product.name || "",
@@ -336,7 +373,7 @@ exports.createBill = async (req, res) => {
                 discountPerItem,
                 totalDiscount,
 
-                finalPrice,
+
                 gstRate,
                 gstAmount,
             });
@@ -656,11 +693,13 @@ exports.createBill = async (req, res) => {
                 items,
 
                 summary: {
+                    totalAmount: Number((subTotal + totalGST + totalItemDiscount).toFixed(2)),
                     subTotal: Number(subTotal.toFixed(2)),
                     cgst,
                     sgst,
                     totalGST: Number(totalGST.toFixed(2)),
-                    discount,
+                    discountAmount: Number(totalItemDiscount.toFixed(2)),
+                    loyaltyDiscount: discount,
                     grandTotal
                 },
 

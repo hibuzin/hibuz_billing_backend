@@ -12,7 +12,7 @@ exports.allstockcheck = async (req, res) => {
         const barcodes = await Barcode.find({
             superAdminId: hierarchy.superAdminId
         })
-            .populate("productId", "name brand stock unit unitValue mrp costPrice sellingPrice")
+            .populate("productId", "name brand itemCode stock unit unitValue mrp costPrice sellingPrice")
             .sort({ createdAt: -1 });
 
         const data = [];
@@ -52,6 +52,7 @@ exports.allstockcheck = async (req, res) => {
                 productId: product._id,
                 productName: product.name || "",
                 brand: product.brand || "",
+                itemCode: product.itemCode || "",
 
                 barcode: barcode.code,
 
@@ -103,7 +104,7 @@ exports.getStockValue = async (req, res) => {
         const barcodes = await Barcode.find({
             superAdminId: hierarchy.superAdminId
         })
-            .populate("productId", "name brand stock mrp costPrice sellingPrice unit unitValue")
+            .populate("productId", "name brand itemCode stock mrp costPrice sellingPrice unit unitValue")
             .sort({ createdAt: -1 });
 
         let totalCostValue = 0;
@@ -134,6 +135,7 @@ exports.getStockValue = async (req, res) => {
                 productId: product._id,
                 productName: product.name || "",
                 brand: product.brand || "",
+                itemCode: product.itemCode || "",
 
                 barcode: barcode.code || "",
 
@@ -220,7 +222,7 @@ exports.getproductsearchstock = async (req, res) => {
                 "productId",
                 "name itemCode brand stock unit unitValue mrp costPrice sellingPrice"
             )
-            
+
             .sort({ createdAt: -1 });
 
         const data = [];
@@ -282,6 +284,7 @@ exports.getproductsearchstock = async (req, res) => {
         });
     }
 };
+
 
 exports.productStockById = async (req, res) => {
     try {
@@ -353,6 +356,7 @@ exports.productStockById = async (req, res) => {
                 productId: product._id,
                 productName: product.name,
                 brand: product.brand || "",
+                itemCode: product.itemCode || "",
 
                 barcode: barcode.code,
 
@@ -395,6 +399,7 @@ exports.productStockById = async (req, res) => {
                 productId: product._id,
                 productName: product.name,
                 brand: product.brand || "",
+                itemCode: product.itemCode || "",
 
                 unit: product.unit || "pcs",
                 unitValue: product.unitValue || 1,
@@ -429,6 +434,7 @@ exports.productStockById = async (req, res) => {
         });
     }
 };
+
 
 exports.getTopSellingProducts = async (req, res) => {
     try {

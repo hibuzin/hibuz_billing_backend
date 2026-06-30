@@ -39,6 +39,8 @@ exports.productcreate = async (req, res) => {
             sellingPrice,
             barcode,
             priceLevel,
+            productType,
+            parentProductId,
             lowStockQty
         } = req.body;
 
@@ -113,6 +115,44 @@ exports.productcreate = async (req, res) => {
 
         const processedMrp = Number(mrp || 0);
 
+        const allowedProductTypes = ["normal", "bulk", "repack"];
+
+        const finalProductType = productType
+            ? String(productType).trim().toLowerCase()
+            : "normal";
+
+        if (!allowedProductTypes.includes(finalProductType)) {
+            return res.status(400).json({
+                success: false,
+                message: "Product type must be normal, bulk or repack"
+            });
+        }
+        let finalParentProductId = null;
+
+        if (finalProductType === "repack") {
+            if (!parentProductId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Parent bulk product required for repack product"
+                });
+            }
+
+            const parentProduct = await Product.findOne({
+                _id: parentProductId,
+                productType: "bulk",
+                superAdminId: hierarchy.superAdminId
+            });
+
+            if (!parentProduct) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Parent bulk product not found"
+                });
+            }
+
+            finalParentProductId = parentProductId;
+        }
+
 
         const processedCostPrice = Number(costPrice || 0);
         const processedSellingPrice = Number(sellingPrice || 0);
@@ -171,6 +211,9 @@ exports.productcreate = async (req, res) => {
 
             hsnCode: hsnCode ? String(hsnCode).trim() : "",
             gstRate: processedGstRate,
+
+            productType: finalProductType,
+            parentProductId: finalParentProductId,
 
             ...hierarchy,
             createdBy: req.user.userId
@@ -582,6 +625,44 @@ exports.getproductMrps = async (req, res) => {
     }
 };
 
+exports.getProductsByType = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+        const { productType } = req.query;
+
+        const allowedProductTypes = ["normal", "bulk", "repack"];
+
+        if (!productType || !allowedProductTypes.includes(productType)) {
+            return res.status(400).json({
+                success: false,
+                message: "productType must be normal, bulk or repack"
+            });
+        }
+
+        const products = await Product.find({
+            superAdminId: hierarchy.superAdminId,
+            productType
+        })
+            .populate("categoryId", "name")
+            .populate("parentProductId", "name productType unit unitValue stock")
+            .sort({ createdAt: -1 });
+
+        return res.status(200).json({
+            success: true,
+            message: `${productType} products fetched successfully`,
+            count: products.length,
+            data: products
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message
+        });
+    }
+};
+
 exports.allProducts = async (req, res) => {
     try {
         const hierarchy = attachHierarchy(req.user);
@@ -693,7 +774,7 @@ exports.searchProducts = async (req, res) => {
             productId: product._id,
             productName: product.name || "",
             itemCode: product.itemCode || "",
-            
+
             stock: Number(product.stock || 0),
             reservedStock: Number(product.reservedStock || 0),
 

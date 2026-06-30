@@ -38,6 +38,20 @@ const sessionSchema = new mongoose.Schema(
             default: 0
         },
 
+        openingDenomination: {
+            coin1: { type: Number, default: 0 },
+            coin2: { type: Number, default: 0 },
+            coin5: { type: Number, default: 0 },
+            coin10: { type: Number, default: 0 },
+
+            note10: { type: Number, default: 0 },
+            note20: { type: Number, default: 0 },
+            note50: { type: Number, default: 0 },
+            note100: { type: Number, default: 0 },
+            note200: { type: Number, default: 0 },
+            note500: { type: Number, default: 0 }
+        },
+
         closingAmount: {
             type: Number,
             default: 0
@@ -115,6 +129,21 @@ const sessionSchema = new mongoose.Schema(
         cashCounted: {
             type: Number,
             default: 0
+        },
+
+        closingDenomination: {
+            coin1: { type: Number, default: 0 },
+            coin2: { type: Number, default: 0 },
+            coin5: { type: Number, default: 0 },
+            coin10: { type: Number, default: 0 },
+            coin20: { type: Number, default: 0 },
+
+            note10: { type: Number, default: 0 },
+            note20: { type: Number, default: 0 },
+            note50: { type: Number, default: 0 },
+            note100: { type: Number, default: 0 },
+            note200: { type: Number, default: 0 },
+            note500: { type: Number, default: 0 }
         },
 
         difference: {

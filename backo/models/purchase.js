@@ -18,6 +18,7 @@ const purchaseSchema = new mongoose.Schema({
         required: true,
         trim: true
     },
+    
 
     invoiceDate: {
         type: String

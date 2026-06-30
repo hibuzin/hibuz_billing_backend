@@ -9,6 +9,18 @@ const productSchema = new mongoose.Schema({
         trim: true
     },
 
+    productType: {
+        type: String,
+        enum: ["normal", "bulk", "repack"],
+        default: "normal"
+    },
+
+    parentProductId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+        default: null
+    },
+
     name: { type: String, required: true },
 
     description: {
