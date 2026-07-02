@@ -165,14 +165,9 @@ exports.createPurchase = async (req, res) => {
             const productId = item.productId;
 
 
-            const mrp = Number(item.mrp);
+
             const qty = Number(item.qty);
             const freeQty = Number(item.freeQty || 0);
-
-            const netcost = Number(item.netcost || item.netCost);
-            const netAmount = round2(netcost * qty);
-
-            const sellingPrice = Number(item.sellingPrice || mrp);
 
             const priceLevel = item.priceLevel || null;
             let barcode = String(item.barcode || item.code || "").trim();
@@ -198,19 +193,6 @@ exports.createPurchase = async (req, res) => {
                 });
             }
 
-            if (isNaN(netcost) || netcost < 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid net cost"
-                });
-            }
-
-            if (isNaN(mrp) || mrp <= 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid MRP"
-                });
-            }
 
 
             const product = await Product.findOne({
@@ -222,6 +204,29 @@ exports.createPurchase = async (req, res) => {
                 return res.status(404).json({
                     success: false,
                     message: "Product not found"
+                });
+            }
+
+            const netcost = Number(item.netcost ?? item.netCost ?? product.costPrice);
+
+            if (isNaN(netcost) || netcost < 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid net cost"
+                });
+            }
+
+
+            const netAmount = round2(netcost * qty);
+
+            const sellingPrice = Number(item.sellingPrice ?? product.sellingPrice ?? mrp);
+
+            const mrp = Number(item.mrp ?? product.mrp);
+
+            if (isNaN(mrp) || mrp <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid MRP"
                 });
             }
 
@@ -1366,7 +1371,7 @@ exports.getPurchaseById = async (req, res) => {
                         item.productId?.name ||
                         item.productName ||
                         "",
-                        
+
                     description:
                         item.description ||
                         item.productId?.description ||
