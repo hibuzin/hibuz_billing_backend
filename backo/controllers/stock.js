@@ -1,4 +1,5 @@
 const Product = require("../models/product");
+const mongoose = require("mongoose");
 const Purchase = require("../models/purchase");
 const Barcode = require("../models/barcode");
 const Bill = require("../models/bill");
@@ -81,6 +82,99 @@ exports.allstockcheck = async (req, res) => {
 
         return res.status(200).json({
             success: true,
+            count: data.length,
+            data
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+};
+
+
+exports.stockCheckByBulkId = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+        const { bulkId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(bulkId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid bulk product id"
+            });
+        }
+
+        const bulkProduct = await Product.findOne({
+            _id: bulkId,
+            superAdminId: hierarchy.superAdminId,
+            productType: "bulk"
+        });
+
+        if (!bulkProduct) {
+            return res.status(404).json({
+                success: false,
+                message: "Bulk product not found"
+            });
+        }
+
+        const barcodes = await Barcode.find({
+            superAdminId: hierarchy.superAdminId
+        }).populate(
+            "productId",
+            "name brand itemCode stock unit unitValue mrp costPrice sellingPrice parentProductId productType"
+        );
+
+        const formatQty = (value) => {
+            const num = Number(value || 0);
+            return Number.isInteger(num)
+                ? String(num)
+                : String(Number(num.toFixed(2)));
+        };
+
+        const data = [];
+
+        for (const barcode of barcodes) {
+            const product = barcode.productId;
+
+            if (!product) continue;
+
+            // Only repack products of this bulk product
+            if (
+                product.productType !== "repack" ||
+                String(product.parentProductId) !== String(bulkId)
+            ) {
+                continue;
+            }
+
+            const currentStock = Number(barcode.availableQty || 0);
+            const totalQty = Number(barcode.qty || 0);
+            const soldQty = Math.max(totalQty - currentStock, 0);
+
+            data.push({
+                productId: product._id,
+                productName: product.name,
+                barcode: barcode.code,
+                currentStock,
+                soldQty,
+                totalQty,
+                unit: barcode.unit,
+                unitValue: barcode.unitValue
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            bulkProduct: {
+                _id: bulkProduct._id,
+                name: bulkProduct.name,
+                stock: bulkProduct.stock,
+                unit: bulkProduct.unit,
+                unitValue: bulkProduct.unitValue
+            },
             count: data.length,
             data
         });

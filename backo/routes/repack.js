@@ -6,6 +6,7 @@ const authorize = require("../middleware/role");
 
 const {
     createRepack,
+    searchRepackProducts,
     getRepackProductsByBulk,
     getRepacks,
     getRepackById
@@ -19,10 +20,18 @@ router.post(
 );
 
 
+router.post(
+    "/create",
+    verifyToken,
+    authorize("super_admin", "admin"),
+    searchRepackProducts
+);
+
+
 router.get(
     "/repack-by-bulk/:bulkProductId",
     verifyToken,
-   getRepackProductsByBulk
+    getRepackProductsByBulk
 );
 
 router.get(
@@ -30,6 +39,12 @@ router.get(
     verifyToken,
     authorize("super_admin", "admin"),
     getRepacks
+);
+
+router.get(
+    "/search",
+    verifyToken,
+    searchRepackProducts
 );
 
 router.get(

@@ -7,6 +7,7 @@ const authorize = require("../middleware/role");
 
 const {
     allstockcheck,
+    stockCheckByBulkId,
     getStockValue,
     getproductsearchstock,
     getTopSellingProducts,
@@ -20,6 +21,14 @@ router.get(
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     allstockcheck
+
+);
+
+router.get(
+    "/bulk/:bulkId",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    stockCheckByBulkId
 
 );
 
@@ -52,7 +61,7 @@ router.get(
     "/top-selling-products",
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
-   getTopSellingProducts
+    getTopSellingProducts
 );
 
 router.get(

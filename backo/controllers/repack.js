@@ -13,7 +13,7 @@ const convertToKg = (unit, unitValue, qty) => {
         return finalQty * finalUnitValue;
     }
 
-    
+
     if (finalUnit === "g" || finalUnit === "gram" || finalUnit === "grams") {
         return (finalQty * finalUnitValue) / 1000;
     }
@@ -292,6 +292,88 @@ exports.createRepack = async (req, res) => {
         await session.abortTransaction();
         session.endSession();
 
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+};
+
+
+exports.searchRepackProducts = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+        const { search } = req.query;
+
+        if (!search || search.trim() === "") {
+            return res.status(400).json({
+                success: false,
+                message: "Search is required"
+            });
+        }
+
+        const searchText = search.trim();
+
+        const barcodes = await Barcode.find({
+            superAdminId: hierarchy.superAdminId
+        })
+            .populate({
+                path: "productId",
+                match: {
+                    superAdminId: hierarchy.superAdminId,
+                    productType: "repack"
+                },
+                select: "name brand itemCode stock unit unitValue mrp sellingPrice"
+            })
+            .sort({ createdAt: -1 });
+
+        const data = [];
+
+        for (const barcode of barcodes) {
+            const product = barcode.productId;
+
+            if (!product) continue;
+
+            const match =
+                product.name?.toLowerCase().includes(searchText.toLowerCase()) ||
+                product.itemCode?.toLowerCase().includes(searchText.toLowerCase()) ||
+                barcode.code?.toLowerCase().includes(searchText.toLowerCase());
+
+            if (!match) continue;
+
+            data.push({
+                productId: product._id,
+                productName: product.name || "",
+                brand: product.brand || "",
+                itemCode: product.itemCode || "",
+
+                barcode: barcode.code,
+
+                stock: Number(barcode.availableQty || 0),
+
+                unit: barcode.unit || product.unit,
+                unitValue: barcode.unitValue || product.unitValue,
+
+                mrp: barcode.mrp || product.mrp,
+                sellingPrice: barcode.sellingPrice || product.sellingPrice,
+
+                status:
+                    Number(barcode.availableQty || 0) <= 0
+                        ? "Out Of Stock"
+                        : Number(barcode.availableQty || 0) <= 10
+                            ? "Low Stock"
+                            : "Available"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            count: data.length,
+            data
+        });
+
+    } catch (err) {
         return res.status(500).json({
             success: false,
             message: "Server error",
