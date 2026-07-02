@@ -96,6 +96,48 @@ exports.allstockcheck = async (req, res) => {
 };
 
 
+exports.getAllBulkProducts = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+
+        const bulkProducts = await Product.find({
+            superAdminId: hierarchy.superAdminId,
+            productType: "bulk"
+        })
+            .select(
+                "name brand itemCode stock unit unitValue mrp costPrice sellingPrice"
+            )
+            .sort({ name: 1 });
+
+        const data = bulkProducts.map((item) => ({
+            bulkId: item._id,
+            productName: item.name,
+            brand: item.brand || "",
+            itemCode: item.itemCode || "",
+            stock: item.stock || 0,
+            unit: item.unit,
+            unitValue: item.unitValue,
+            mrp: item.mrp || 0,
+            costPrice: item.costPrice || 0,
+            sellingPrice: item.sellingPrice || 0
+        }));
+
+        return res.status(200).json({
+            success: true,
+            count: data.length,
+            data
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+};
+
+
 exports.stockCheckByBulkId = async (req, res) => {
     try {
         const hierarchy = attachHierarchy(req.user);
