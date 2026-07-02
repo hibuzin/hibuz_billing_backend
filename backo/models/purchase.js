@@ -8,20 +8,33 @@ const purchaseSchema = new mongoose.Schema({
         required: true
     },
 
+    grnNo: {
+        type: String,
+        required: true
+    },
 
     grnDate: {
-        type: Date
+        type: Date,
+        required: true
     },
+
 
     invoiceNo: {
         type: String,
-        required: true,
-        trim: true
+        required: true
     },
-    
+
+
+    invoiceAmount: {
+        type: Number,
+        required: true,
+        default: 0
+    },
+
 
     invoiceDate: {
-        type: String
+        type: String,
+        required: true
 
     },
 

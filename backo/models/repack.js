@@ -52,8 +52,6 @@ const repackSchema = new mongoose.Schema(
             }
         ],
 
-        note: String,
-
         superAdminId: mongoose.Schema.Types.ObjectId,
         adminId: mongoose.Schema.Types.ObjectId,
         createdBy: mongoose.Schema.Types.ObjectId

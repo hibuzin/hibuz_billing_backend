@@ -11,16 +11,15 @@ const { attachHierarchy } = require("../utils/hierarchy");
 
 const { getFinancialYear } = require("../utils/financial_year");
 
-const getNextPurchaseInvoiceNo = async (
+const getNextGRNNo = async (
     superAdminId,
     invoiceDate = new Date()
 ) => {
-
     const fy = getFinancialYear(invoiceDate);
 
     const counter = await Counter.findOneAndUpdate(
         {
-            name: `purchase_invoice_${superAdminId}_${fy}`
+            name: `purchase_grn_${superAdminId}_${fy}`
         },
         {
             $inc: { seq: 1 }
@@ -31,13 +30,24 @@ const getNextPurchaseInvoiceNo = async (
         }
     );
 
-    return `PUR/${fy}/${String(counter.seq).padStart(5, "0")}`;
+    return `GRN/${fy}/${String(counter.seq).padStart(5, "0")}`;
 };
-
 
 exports.createPurchase = async (req, res) => {
     try {
-        const { supplierId, items, invoiceDate, supplierBillAmount, paidAmount, DueDate } = req.body;
+        const {
+            supplierId,
+            items,
+            invoiceDate,
+
+            invoiceNo,
+            invoiceAmount,
+            grnDate,
+            supplierBillAmount,
+
+            paidAmount,
+            DueDate
+        } = req.body;
 
         if (!supplierId || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({
@@ -69,6 +79,41 @@ exports.createPurchase = async (req, res) => {
             });
         }
 
+        let finalGrnDate = new Date();
+
+        if (grnDate) {
+            finalGrnDate = new Date(grnDate);
+
+            if (grnDate.includes(".")) {
+                const [day, month, year] = grnDate.split(".");
+                finalGrnDate = new Date(`${year}-${month}-${day}`);
+            }
+
+            if (isNaN(finalGrnDate.getTime())) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid GRN date format. Use YYYY-MM-DD or DD.MM.YYYY"
+                });
+            }
+        }
+
+        const finalInvoiceAmount = Number(invoiceAmount);
+        const finalSupplierBillAmount = Number(supplierBillAmount);
+
+        if (isNaN(finalInvoiceAmount) || finalInvoiceAmount <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Invoice amount is required"
+            });
+        }
+
+        if (isNaN(finalSupplierBillAmount) || finalSupplierBillAmount <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Supplier bill amount is required"
+            });
+        }
+
 
         let finalDueDate = null;
 
@@ -90,9 +135,9 @@ exports.createPurchase = async (req, res) => {
 
         const hierarchy = attachHierarchy(req.user);
 
-        const invoiceNo = await getNextPurchaseInvoiceNo(
+        const grnNo = await getNextGRNNo(
             hierarchy.superAdminId,
-            finalInvoiceDate
+            finalGrnDate
         );
 
         const supplier = await Supplier.findOne({
@@ -481,7 +526,6 @@ exports.createPurchase = async (req, res) => {
             });
         }
 
-        const finalSupplierBillAmount = Number(supplierBillAmount || totalAmount);
         const firstPaidAmount = Number(paidAmount || 0);
 
         if (firstPaidAmount > finalSupplierBillAmount) {
@@ -507,8 +551,11 @@ exports.createPurchase = async (req, res) => {
             supplierId,
             supplierName: supplier.supplierName || "",
             supplierEmail: supplier.email || "",
+            grnNo,
+            grnDate: finalGrnDate,
             invoiceNo,
-        
+            invoiceAmount: finalInvoiceAmount,
+
             invoiceDate: finalInvoiceDate,
             items: processedItems,
             totalAmount,
@@ -556,7 +603,16 @@ exports.createPurchase = async (req, res) => {
                     email: String(supplier.email || "")
                 },
 
+                grnNo: responsePurchase.grnNo,
+
+                grnDate: responsePurchase.grnDate
+                    ? new Date(responsePurchase.grnDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
+
                 invoiceNo: responsePurchase.invoiceNo,
+                invoiceAmount: responsePurchase.invoiceAmount,
 
                 invoiceDate: responsePurchase.invoiceDate
                     ? new Date(responsePurchase.invoiceDate)
@@ -1108,6 +1164,14 @@ exports.getPurchases = async (req, res) => {
                     email: purchase.supplierId?.email || purchase.supplierEmail || ""
                 },
 
+                grnNo: purchase.grnNo || "",
+
+                grnDate: purchase.grnDate
+                    ? new Date(purchase.grnDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
+
                 invoiceNo: purchase.invoiceNo,
 
                 invoiceDate: purchase.invoiceDate
@@ -1122,19 +1186,15 @@ exports.getPurchases = async (req, res) => {
                         .replace(/\//g, "-")
                     : "",
 
-                totalAmount: purchase.totalAmount || 0,
+                totalAmount: round2(purchase.totalAmount || 0),
                 totalGrossAmount: Math.round((totalGrossAmount + Number.EPSILON) * 100) / 100,
                 totalTaxAmount: Math.round((totalTaxAmount + Number.EPSILON) * 100) / 100,
 
-                supplierBillAmount: purchase.supplierBillAmount || 0,
-                paidAmount: purchase.paidAmount || 0,
-                balanceAmount: purchase.balanceAmount || 0,
+                supplierBillAmount: round2(purchase.supplierBillAmount || 0),
+                paidAmount: round2(purchase.paidAmount || 0),
+                balanceAmount: round2(purchase.balanceAmount || 0),
 
-                DueDate: purchase.DueDate
-                    ? new Date(purchase.DueDate)
-                        .toLocaleDateString("en-GB")
-                        .replace(/\//g, "-")
-                    : "",
+                paymentStatus: purchase.paymentStatus || "pending",
 
                 paymentHistory: purchase.paymentHistory || [],
 
@@ -1155,7 +1215,7 @@ exports.getPurchases = async (req, res) => {
                     totalStockQty: item.totalStockQty || 0,
 
                     qtyType: item.qtyType || "unit",
-                    stockQty: item.stockQty || item.receivedQty || 0,
+                    stockQty: item.receivedQty || 0,
 
                     unit: item.unit || "pcs",
                     unitValue: item.unitValue || 1,
@@ -1257,6 +1317,14 @@ exports.getPurchaseById = async (req, res) => {
                     email: purchase.supplierId?.email || ""
                 },
 
+                grnNo: purchase.grnNo || "",
+
+                grnDate: purchase.grnDate
+                    ? new Date(purchase.grnDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
+
                 invoiceNo: purchase.invoiceNo,
 
                 invoiceDate: purchase.invoiceDate
@@ -1271,21 +1339,15 @@ exports.getPurchaseById = async (req, res) => {
                         .replace(/\//g, "-")
                     : "",
 
-                totalAmount: purchase.totalAmount || 0,
                 totalAmount: round2(purchase.totalAmount || 0),
                 totalGrossAmount: round2(totalGrossAmount),
                 totalTaxAmount: round2(totalTaxAmount),
-                supplierBillAmount: purchase.supplierBillAmount || 0,
-                paidAmount: purchase.paidAmount || 0,
-                balanceAmount: purchase.balanceAmount || 0,
+
+                supplierBillAmount: round2(purchase.supplierBillAmount || 0),
+                paidAmount: round2(purchase.paidAmount || 0),
+                balanceAmount: round2(purchase.balanceAmount || 0),
+
                 paymentStatus: purchase.paymentStatus || "",
-
-
-                DueDate: purchase.DueDate
-                    ? new Date(purchase.DueDate)
-                        .toLocaleDateString("en-GB")
-                        .replace(/\//g, "-")
-                    : "",
 
                 paymentHistory: purchase.paymentHistory || [],
 
@@ -1301,10 +1363,10 @@ exports.getPurchaseById = async (req, res) => {
                     productId: item.productId?._id || item.productId,
 
                     productName:
-                        item.productName ||
                         item.productId?.name ||
+                        item.productName ||
                         "",
-
+                        
                     description:
                         item.description ||
                         item.productId?.description ||
@@ -1319,7 +1381,7 @@ exports.getPurchaseById = async (req, res) => {
                     totalStockQty: item.totalStockQty || 0,
 
                     qtyType: item.qtyType || "unit",
-                    stockQty: item.stockQty || item.receivedQty || 0,
+                    stockQty: item.receivedQty || 0,
 
                     unit: item.unit || "pcs",
                     unitValue: item.unitValue || 1,

@@ -13,6 +13,7 @@ const convertToKg = (unit, unitValue, qty) => {
         return finalQty * finalUnitValue;
     }
 
+    
     if (finalUnit === "g" || finalUnit === "gram" || finalUnit === "grams") {
         return (finalQty * finalUnitValue) / 1000;
     }
@@ -27,7 +28,7 @@ exports.createRepack = async (req, res) => {
     try {
         session.startTransaction();
 
-        const { fromProductId, outputs, note } = req.body;
+        const { fromProductId, outputs } = req.body;
 
         if (!fromProductId) {
             await session.abortTransaction();
@@ -270,8 +271,6 @@ exports.createRepack = async (req, res) => {
                         toUnit: item.product.unit,
                         toUnitValue: Number(item.product.unitValue || 1)
                     })),
-
-                    note: note || "",
 
                     ...hierarchy,
                     createdBy: req.user.userId
