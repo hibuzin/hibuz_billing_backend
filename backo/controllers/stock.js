@@ -96,6 +96,90 @@ exports.allstockcheck = async (req, res) => {
 };
 
 
+exports.getAllRepackStock = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+
+        const barcodes = await Barcode.find({
+            superAdminId: hierarchy.superAdminId
+        })
+            .populate(
+                "productId",
+                "name brand itemCode stock unit unitValue mrp costPrice sellingPrice parentProductId productType"
+            )
+            .sort({ createdAt: -1 });
+
+        const data = [];
+
+        const formatQty = (value) => {
+            const num = Number(value || 0);
+            return Number.isInteger(num)
+                ? String(num)
+                : String(Number(num.toFixed(2)));
+        };
+
+        for (const barcode of barcodes) {
+            const product = barcode.productId;
+
+            if (!product) continue;
+
+            // Only repack products
+            if (product.productType !== "repack") continue;
+
+            const currentStock = Number(Number(barcode.availableQty || 0).toFixed(2));
+            const totalQty = Number(Number(barcode.qty || 0).toFixed(2));
+            const soldQty = Math.max(
+                Number((totalQty - currentStock).toFixed(2)),
+                0
+            );
+
+            data.push({
+                productId: product._id,
+                bulkProductId: product.parentProductId,
+
+                productName: product.name,
+                brand: product.brand || "",
+                itemCode: product.itemCode || "",
+
+                barcode: barcode.code,
+
+                totalQty,
+                currentStock,
+                soldQty,
+
+                mrp: barcode.mrp || product.mrp || 0,
+                costPrice: barcode.costPrice || product.costPrice || 0,
+                sellingPrice: barcode.sellingPrice || product.sellingPrice || 0,
+
+                unit: barcode.unit,
+                unitValue: barcode.unitValue,
+                unitText: `${barcode.unitValue} ${barcode.unit}`,
+
+                status:
+                    currentStock <= 0
+                        ? "Out Of Stock"
+                        : currentStock <= 10
+                            ? "Low Stock"
+                            : "Available"
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            count: data.length,
+            data
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+};
+
+
 exports.getAllBulkProducts = async (req, res) => {
     try {
         const hierarchy = attachHierarchy(req.user);
