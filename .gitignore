@@ -105,3 +105,12 @@ macos/
 windows/
 web/
 test/
+
+
+# Google Vision
+google-vision-key.json
+
+# Environment Variables
+.env
+.env.local
+.env.production

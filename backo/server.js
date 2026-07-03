@@ -54,6 +54,7 @@ const duePaymentRoutes = require("./routes/due_payment");
 const sessionRoutes = require("./routes/session");
 const expenseRoutes = require("./routes/expense");
 const cashRegisterRoutes = require("./routes/cashregister");
+const ocrRoute = require("./routes/ocr");
 
 
 
@@ -98,7 +99,7 @@ app.use("/api/due-payment", duePaymentRoutes);
 app.use("/api/session", sessionRoutes);
 app.use("/api/expense", expenseRoutes);
 app.use("/api/cash-register", cashRegisterRoutes);
-
+app.use("/api/ocr", ocrRoute);
 
 
 app.get("/", (req, res) => {
