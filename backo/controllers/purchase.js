@@ -490,9 +490,8 @@ exports.createPurchase = async (req, res) => {
                 hsnCode: product.hsnCode || "",
 
                 categoryId: product.categoryId?._id,
-               // categoryName: product.categoryId?.name || "",
+                categoryName: product.categoryId?.name || "",
 
-               categoryName,
                 taxPercentage,
                 taxAmount,
 
@@ -1902,9 +1901,7 @@ exports.updatePurchase = async (req, res) => {
                 hsnCode: product.hsnCode || "",
 
                 categoryId: product.categoryId?._id,
-
-              //  categoryName: product.categoryId?.name || "",
-              categoryName,
+                categoryName: product.categoryId?.name || "",
 
                 taxPercentage,
                 taxAmount,

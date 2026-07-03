@@ -44,7 +44,7 @@ exports.productcreate = async (req, res) => {
             lowStockQty
         } = req.body;
 
-        if (!name || !categoryId) {
+        if (!name) {
             return res.status(400).json({
                 success: false,
                 message: "Name required"
@@ -206,8 +206,10 @@ exports.productcreate = async (req, res) => {
             costPrice: processedCostPrice,
             sellingPrice: processedSellingPrice,
 
-            categoryId,
-            categoryName: cat.name || "",
+          
+
+            categoryId: categoryId || null,
+categoryName: cat?.name || "",
 
             hsnCode: hsnCode ? String(hsnCode).trim() : "",
             gstRate: processedGstRate,
@@ -342,7 +344,7 @@ exports.bulkProductCreate = async (req, res) => {
                 const hsnCode = item.hsnCode ? String(item.hsnCode).trim() : "";
                 const barcodeCode = item.barcode ? String(item.barcode).trim() : "";
 
-                if (!name || !categoryId) {
+                if (!name) {
                     errors.push({
                         row: i + 1,
                         name,
@@ -1072,17 +1074,21 @@ exports.updateProduct = async (req, res) => {
         }
 
         if (categoryId) {
-            const cat = await category.findOne({
-                _id: categoryId,
-                superAdminId: hierarchy.superAdminId
-            });
+           let cat = null;
 
-            if (!cat) {
-                return res.status(404).json({
-                    success: false,
-                    message: "Category not found"
-                });
-            }
+if (categoryId) {
+    cat = await category.findOne({
+        _id: categoryId,
+        superAdminId: hierarchy.superAdminId
+    });
+
+    if (!cat) {
+        return res.status(404).json({
+            success: false,
+            message: "Category not found"
+        });
+    }
+}
 
             product.categoryId = categoryId;
             product.categoryName = cat.name || "";
