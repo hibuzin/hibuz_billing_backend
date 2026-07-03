@@ -55,17 +55,21 @@ exports.productcreate = async (req, res) => {
 
         const itemCode = await generateItemCode(hierarchy.superAdminId);
 
-        const cat = await category.findOne({
-            _id: categoryId,
-            superAdminId: hierarchy.superAdminId
-        });
+        let cat = null;
 
-        if (!cat) {
-            return res.status(404).json({
-                success: false,
-                message: "Category not found"
-            });
-        }
+if (categoryId) {
+    cat = await category.findOne({
+        _id: categoryId,
+        superAdminId: hierarchy.superAdminId
+    });
+
+    if (!cat) {
+        return res.status(404).json({
+            success: false,
+            message: "Category not found"
+        });
+    }
+}
 
         const processedGstRate = Number(gstRate || 0);
 
@@ -1088,6 +1092,7 @@ if (categoryId) {
             message: "Category not found"
         });
     }
+
 }
 
             product.categoryId = categoryId;
