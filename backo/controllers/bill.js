@@ -32,10 +32,14 @@ exports.createBill = async (req, res) => {
             redeemPoints = 0,
             priceLevel = "normal",
 
+            discountPercent,
+            discountAmount,
+
             paymentStatus = "paid",
             paymentMethod = "cash",
 
             payments = [],
+            paidAmount = 0,
             dueDate
         } = req.body;
 
@@ -52,22 +56,45 @@ exports.createBill = async (req, res) => {
         const hierarchy = attachHierarchy(req.user);
 
         const invoiceNo = await getNextInvoiceNo(hierarchy.superAdminId);
-
         let subTotal = 0;
         let totalGST = 0;
+        let totalItemDiscount = 0;
+
         const items = [];
 
         const gstAuditItems = [];
 
+        const codeQtyMap = {};
+
         for (const code of codes || []) {
-            const qty = 1;
             const searchValue = String(code).trim();
+
+            if (!searchValue) continue;
+
+            codeQtyMap[searchValue] =
+                (codeQtyMap[searchValue] || 0) + 1;
+        }
+
+        for (const [searchValue, qty] of Object.entries(codeQtyMap)) {
 
             let barcode = await Barcode.findOne({
                 code: searchValue,
-                superAdminId: hierarchy.superAdminId,
-                availableQty: { $gte: qty }
+                superAdminId: hierarchy.superAdminId
             });
+
+            if (!barcode) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Barcode not found: ${searchValue}`
+                });
+            }
+
+            if (Number(barcode.availableQty || 0) < qty) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Stock not available for barcode ${searchValue}. Available: ${barcode.availableQty || 0}`
+                });
+            }
 
             let product = null;
 
@@ -78,21 +105,38 @@ exports.createBill = async (req, res) => {
                 });
             }
 
-            if (!barcode || !product) {
+            if (!product) {
                 return res.status(400).json({
                     success: false,
                     message: `Product not found for: ${searchValue}`
                 });
             }
 
-            let price = Number(barcode.sellingPrice || 0);
+            const normalSellingPrice = Number(barcode.sellingPrice || 0);
+
+            let price = normalSellingPrice;
+            let slabPrice = null;
+            let discountPerItem = 0;
+            let totalDiscount = 0;
 
             let appliedPriceLevel = "normal";
             let appliedSlab = null;
 
+
             const gstRate = Number(barcode.gstRate || product.gstRate || 0);
 
-            const finalPrice = Number((price * qty).toFixed(2));
+            const grossAmount = Number((price * qty).toFixed(2));
+
+            const discountAmount = Number(
+                ((grossAmount * discountPercent) / 100).toFixed(2)
+            );
+
+            totalItemDiscount += discountAmount;
+
+            const finalPrice = Number(
+                (grossAmount - discountAmount).toFixed(2)
+            );
+
             const taxableAmount = Number((finalPrice / (1 + gstRate / 100)).toFixed(2));
             const gstAmount = Number((finalPrice - taxableAmount).toFixed(2));
 
@@ -105,17 +149,24 @@ exports.createBill = async (req, res) => {
                 barcode: barcode.code,
                 productName: product.name || "",
                 name: product.name || "",
-                brand: product.brand || "",
-                flavor: barcode.flavor || "",
-                litters: barcode.litters || "",
+
+                totalAmount: grossAmount,
+                discountPercent,
+                discountAmount,
+                finalPrice,
+
+                unit: barcode.unit || product.unit || "pcs",
+                unitValue: barcode.unitValue || product.unitValue || 1,
+                unitText: `${barcode.unitValue || product.unitValue || 1} ${barcode.unit || product.unit || "pcs"}`,
+
+                totalkg: `${qty * Number(barcode.unitValue || product.unitValue || 1)} ${barcode.unit || product.unit || "pcs"}`,
                 qty,
                 mrp: barcode.mrp || 0,
-                price,
+                sellingPrice: barcode.sellingPrice || 0,
                 appliedPriceLevel,
                 appliedSlab,
                 gstRate,
-                gstAmount,
-                finalPrice
+                gstAmount
             });
 
             if (gstRate > 0 && gstAmount > 0) {
@@ -124,7 +175,7 @@ exports.createBill = async (req, res) => {
                     productName: product.name || "",
                     barcode: barcode.code,
                     qty,
-                    price,
+                    sellingPrice: barcode.sellingPrice || 0,
                     gstRate,
                     gstAmount,
                     finalPrice
@@ -144,6 +195,8 @@ exports.createBill = async (req, res) => {
 
         for (const billItem of billItems) {
             const qty = Number(billItem.qty || 1);
+
+            const discountPercent = Number(billItem.discountPercent || 0);
 
             if (isNaN(qty) || qty <= 0) {
                 return res.status(400).json({
@@ -166,19 +219,16 @@ exports.createBill = async (req, res) => {
 
             const barcode = await Barcode.findOne({
                 productId: product._id,
-                superAdminId: hierarchy.superAdminId,
-                availableQty: { $gte: qty }
+                superAdminId: hierarchy.superAdminId
             });
 
-            if (!barcode) {
-                return res.status(400).json({
-                    success: false,
-                    message: `${product.name} stock not available`
-                });
 
-            }
+            const normalSellingPrice = Number(barcode.sellingPrice || 0);
 
-            let price = Number(barcode.sellingPrice || 0);
+            let price = normalSellingPrice;
+            let slabPrice = null;
+            let discountPerItem = 0;
+            let totalDiscount = 0;
 
             let appliedPriceLevel = "normal";
             let appliedSlab = null;
@@ -238,12 +288,21 @@ exports.createBill = async (req, res) => {
                     });
 
                     if (slab) {
-                        price = Number(slab.price || price);
+                        slabPrice = Number(slab.price || normalSellingPrice);
+
+                        discountPerItem = Number((normalSellingPrice - slabPrice).toFixed(2));
+                        totalDiscount = Number((discountPerItem * qty).toFixed(2));
+
+                        price = slabPrice;
+
                         appliedPriceLevel = "slab";
                         appliedSlab = {
                             minQty: slab.minQty,
                             maxQty: slab.maxQty,
-                            price: slab.price
+                            slabPrice,
+                            normalSellingPrice,
+                            discountPerItem,
+                            totalDiscount
                         };
                     }
                 }
@@ -260,7 +319,18 @@ exports.createBill = async (req, res) => {
 
             }
 
-            const finalPrice = Number((price * qty).toFixed(2));
+            const grossAmount = Number((price * qty).toFixed(2));
+
+            const discountAmount = Number(
+                ((grossAmount * discountPercent) / 100).toFixed(2)
+            );
+
+            totalItemDiscount += discountAmount;
+
+            const finalPrice = Number(
+                (grossAmount - discountAmount).toFixed(2)
+            );
+
             const taxableAmount = Number((finalPrice / (1 + gstRate / 100)).toFixed(2));
             const gstAmount = Number((finalPrice - taxableAmount).toFixed(2));
 
@@ -276,21 +346,36 @@ exports.createBill = async (req, res) => {
                 barcodeId: barcode._id,
                 barcode: barcode.code,
 
+                totalAmount: grossAmount,
+                discountPercent,
+                discountAmount,
+                finalPrice,
 
                 productName: product.name || "",
                 name: product.name || "",
-                brand: product.brand || "",
-                flavor: barcode.flavor || "",
-                litters: barcode.litters || "",
+                unit: barcode.unit || product.unit || "pcs",
+                unitValue: barcode.unitValue || product.unitValue || 1,
+                unitText: `${barcode.unitValue || product.unitValue || 1} ${barcode.unit || product.unit || "pcs"}`,
+                totalUnitQty: qty * Number(barcode.unitValue || product.unitValue || 1),
+                totalUnitText: `${qty * Number(barcode.unitValue || product.unitValue || 1)} ${barcode.unit || product.unit || "pcs"}`,
 
                 qty,
                 mrp: barcode.mrp || 0,
+
+
                 appliedPriceLevel,
                 appliedSlab,
-                price,
+
+
+                sellingPrice: normalSellingPrice,
+                normalSellingPrice,
+                slabPrice,
+                discountPerItem,
+                totalDiscount,
+
+
                 gstRate,
                 gstAmount,
-                finalPrice
             });
 
 
@@ -308,10 +393,6 @@ exports.createBill = async (req, res) => {
             }
 
 
-            barcode.availableQty = Math.max(Number(barcode.availableQty || 0) - qty, 0);
-
-            await barcode.save();
-
             const availableStock =
                 Number(product.stock || 0) -
                 Number(product.reservedStock || 0);
@@ -322,6 +403,13 @@ exports.createBill = async (req, res) => {
                     message: `${product.name} stock not available`
                 });
             }
+
+            barcode.availableQty = Math.max(
+                Number(barcode.availableQty || 0) - qty,
+                0
+            );
+
+            await barcode.save();
 
             const stockUpdate = await Product.updateOne(
                 {
@@ -377,18 +465,31 @@ exports.createBill = async (req, res) => {
 
         let finalPayments = [];
 
-        if (paymentStatus === "due") {
-            finalPayments = [];
+        if (paymentStatus === "due" || paymentStatus === "partial") {
+
+            if (payments.length > 0) {
+                finalPayments = payments;
+            } else if (Number(paidAmount) > 0) {
+                finalPayments = [
+                    {
+                        method: paymentMethod,
+                        amount: Number(paidAmount)
+                    }
+                ];
+            }
+
         } else if (paymentMethod === "split") {
+
             finalPayments = payments;
+
         } else {
+
             finalPayments = [
                 {
                     method: paymentMethod,
                     amount: grandTotal
                 }
             ];
-
         }
 
         const allowedMethods = ["cash", "upi", "card"];
@@ -450,10 +551,10 @@ exports.createBill = async (req, res) => {
                 });
             }
 
-            finalPayments = [];
-            pendingAmount = grandTotal;
+            pendingAmount = Number(
+                (grandTotal - totalPaid).toFixed(2)
+            );
         }
-
 
         const earnedPoints = Math.floor(grandTotal / 100);
 
@@ -478,6 +579,9 @@ exports.createBill = async (req, res) => {
             paymentMethod: finalPayments.length > 1 ? "split" : finalPayments[0]?.method || "due",
             paymentStatus,
             payments: finalPayments,
+
+            paidAmount: totalPaid,
+            pendingAmount,
 
             cashier: req.user.userId || req.user.id,
             createdBy: req.user.userId || req.user.id,
@@ -551,19 +655,54 @@ exports.createBill = async (req, res) => {
         }
 
 
+        const cgst = Number((totalGST / 2).toFixed(2));
+        const sgst = Number((totalGST / 2).toFixed(2));
+
         return res.status(201).json({
             success: true,
             message: "Bill generated successfully",
             data: {
                 billId: bill._id,
+
                 invoiceNo: bill.invoiceNo,
+
+                invoiceDate: new Date().toLocaleDateString("en-GB"),
+
+                invoiceTime: new Date().toLocaleTimeString("en-IN", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit"
+                }),
+
+                customer: customer
+                    ? {
+                        customerId: customer.customerId,
+                        customerName: customer.name,
+                        mobile: customer.phone || ""
+                    }
+                    : null,
+
                 paymentMethod: bill.paymentMethod,
                 paymentStatus: bill.paymentStatus,
+
                 payments: finalPayments,
+
                 paidAmount: totalPaid,
                 pendingAmount,
+
                 items,
-                summary: bill.summary,
+
+                summary: {
+                    totalAmount: Number((subTotal + totalGST + totalItemDiscount).toFixed(2)),
+                    subTotal: Number(subTotal.toFixed(2)),
+                    cgst,
+                    sgst,
+                    totalGST: Number(totalGST.toFixed(2)),
+                    discountAmount: Number(totalItemDiscount.toFixed(2)),
+                    loyaltyDiscount: discount,
+                    grandTotal
+                },
+
                 loyalty: {
                     used: discount,
                     earned: earnedPoints,

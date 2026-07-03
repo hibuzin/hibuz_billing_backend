@@ -8,19 +8,33 @@ const purchaseSchema = new mongoose.Schema({
         required: true
     },
 
+    grnNo: {
+        type: String,
+        required: true
+    },
 
     grnDate: {
-        type: Date
+        type: Date,
+        required: true
     },
+
 
     invoiceNo: {
         type: String,
-        required: true,
-        trim: true
+        required: true
     },
 
+
+    invoiceAmount: {
+        type: Number,
+        required: true,
+        default: 0
+    },
+
+
     invoiceDate: {
-        type: String
+        type: String,
+        required: true
 
     },
 
@@ -49,10 +63,32 @@ const purchaseSchema = new mongoose.Schema({
                 default: ""
             },
 
-            gstpercentage: {
+
+            taxPercentage: {
                 type: Number,
                 default: 0
             },
+
+            taxAmount: {
+                type: Number,
+                default: 0
+            },
+
+            amount: {
+                type: Number,
+                default: 0
+            },
+
+            totalCostWithGST: {
+                type: Number,
+                default: 0
+            },
+
+            isGstIncluded: {
+                type: Boolean,
+                default: true
+            },
+
 
             categoryId: {
                 type: mongoose.Schema.Types.ObjectId,
@@ -64,22 +100,7 @@ const purchaseSchema = new mongoose.Schema({
                 default: ""
             },
 
-            brand: {
-                type: String,
-                default: ""
-            },
-
             description: {
-                type: String,
-                default: ""
-            },
-
-            flavor: {
-                type: String,
-                default: ""
-            },
-
-            litters: {
                 type: String,
                 default: ""
             },
@@ -87,12 +108,72 @@ const purchaseSchema = new mongoose.Schema({
             qty: {
                 type: Number,
                 required: true
-
             },
 
-            costPrice: {
+            isCustomUnitValue: {
+                type: Boolean,
+                default: false
+            },
+
+            freeQty: {
+                type: Number,
+                default: 0
+            },
+
+            totalStockQty: {
+                type: Number,
+                default: 0
+            },
+
+            discountPercent: {
+                type: Number,
+                default: 0
+            },
+
+            discountAmount: {
+                type: Number,
+                default: 0
+            },
+
+            netcost: {
                 type: Number,
                 required: true
+            },
+
+            netAmount: {
+                type: Number,
+                default: 0
+            },
+
+            Rate: {
+                type: Number,
+                default: 0
+            },
+
+            unit: {
+                type: String,
+                enum: ["pcs", "kg"]
+
+            },
+            unitValue: {
+                type: Number,
+                default: 1
+            },
+
+            profitAmount: {
+                type: Number,
+                default: 0
+            },
+
+
+            profitPercent: {
+                type: Number,
+                default: 0
+            },
+
+            roiPercent: {
+                type: Number,
+                default: 0
             },
 
             mrp: {
@@ -103,6 +184,12 @@ const purchaseSchema = new mongoose.Schema({
             sellingPrice: {
                 type: Number,
                 default: 0
+            },
+
+            paymentStatus: {
+                type: String,
+                enum: ["paid", "partial", "pending"],
+                default: "pending"
             },
 
             priceLevel: {
@@ -146,10 +233,6 @@ const purchaseSchema = new mongoose.Schema({
                     }
                 ]
             },
-            gst: {
-                type: Number,
-                default: 0
-            },
 
 
 
@@ -178,6 +261,12 @@ const purchaseSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+
+    DueDate: {
+        type: Date,
+        default: null
+    },
+
     balanceAmount: {
         type: Number,
         default: 0
@@ -186,6 +275,14 @@ const purchaseSchema = new mongoose.Schema({
     paymentHistory: [
         {
             amount: Number,
+
+            paymentType: {
+                type: String,
+                enum: ["cash", "upi", "card", "bank", "cheque"],
+                required: true,
+                default: "cash"
+            },
+
             paidDate: {
                 type: Date,
                 default: Date.now

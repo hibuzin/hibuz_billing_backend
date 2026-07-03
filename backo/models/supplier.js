@@ -23,9 +23,16 @@ const supplierSchema = new mongoose.Schema(
             match: [/^[0-9]{10}$/, "Invalid mobile number"]
         },
 
+        paymentMethod: {
+            type: String,
+            enum: ["cash", "upi", "bank", "cheque"],
+            default: "cash",
+        },
+
 
         gstNumber: {
             type: String,
+            required: true,
             trim: true,
             uppercase: true,
             match: [
@@ -89,7 +96,7 @@ const supplierSchema = new mongoose.Schema(
             }
         },
 
-        
+
 
         isActive: {
             type: Boolean,

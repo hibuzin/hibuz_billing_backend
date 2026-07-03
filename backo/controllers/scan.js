@@ -53,15 +53,19 @@ exports.scanProductForPurchase = async (req, res) => {
                 hsnCode: product.hsnCode || "",
                 gstRate: barcode.gstRate || product.gstRate || 0,
 
-                flavor: barcode.flavor || "",
-                litters: barcode.litters || "",
+
                 kg: barcode.kg || "",
+
+                stock: product.stock || 0,
+                unit: barcode.unit || product.unit || "pcs",
+                unitValue: barcode.unitValue || product.unitValue || 1,
+
 
                 mrp: barcode.mrp || product.mrp || 0,
                 costPrice: barcode.costPrice || product.costPrice || 0,
                 sellingPrice: barcode.sellingPrice || product.sellingPrice || 0,
 
-                
+
             }
         });
 

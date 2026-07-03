@@ -7,6 +7,32 @@ const cashRegisterSchema = new mongoose.Schema({
     cardSales: { type: Number, default: 0 },
     cashOut: { type: Number, default: 0 },
 
+    cashOut: {
+        type: Number,
+        default: 0
+    },
+
+    cashOutHistory: [
+        {
+            amount: {
+                type: Number,
+                required: true
+            },
+            note: {
+                type: String,
+                default: ""
+            },
+            date: {
+                type: Date,
+                default: Date.now
+            },
+            createdBy: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "User"
+            }
+        }
+    ],
+
     closingAmount: { type: Number, default: 0 },
     expectedCash: { type: Number, default: 0 },
     difference: { type: Number, default: 0 },
@@ -46,5 +72,5 @@ const cashRegisterSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 module.exports =
-  mongoose.models.CashRegister ||
-  mongoose.model("CashRegister", cashRegisterSchema);
+    mongoose.models.CashRegister ||
+    mongoose.model("CashRegister", cashRegisterSchema);

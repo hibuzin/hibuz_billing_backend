@@ -2,14 +2,52 @@ const mongoose = require("mongoose");
 
 const Purchase = require("../models/purchase");
 const Product = require("../models/product");
+const ProductPriceHistory = require("../models/product_price_history");
 const Supplier = require("../models/supplier");
 const Barcode = require("../models/barcode");
+const Counter = require("../models/counter");
 const PriceLevel = require("../models/price_level");
 const { attachHierarchy } = require("../utils/hierarchy");
 
+const { getFinancialYear } = require("../utils/financial_year");
+
+const getNextGRNNo = async (
+    superAdminId,
+    invoiceDate = new Date()
+) => {
+    const fy = getFinancialYear(invoiceDate);
+
+    const counter = await Counter.findOneAndUpdate(
+        {
+            name: `purchase_grn_${superAdminId}_${fy}`
+        },
+        {
+            $inc: { seq: 1 }
+        },
+        {
+            new: true,
+            upsert: true
+        }
+    );
+
+    return `GRN/${fy}/${String(counter.seq).padStart(5, "0")}`;
+};
+
 exports.createPurchase = async (req, res) => {
     try {
-        const { supplierId, items, invoiceNo, invoiceDate, supplierBillAmount, paidAmount } = req.body;
+        const {
+            supplierId,
+            items,
+            invoiceDate,
+
+            invoiceNo,
+            invoiceAmount,
+            grnDate,
+            supplierBillAmount,
+
+            paidAmount,
+            DueDate
+        } = req.body;
 
         if (!supplierId || !Array.isArray(items) || items.length === 0) {
             return res.status(400).json({
@@ -18,12 +56,7 @@ exports.createPurchase = async (req, res) => {
             });
         }
 
-        if (!invoiceNo) {
-            return res.status(400).json({
-                success: false,
-                message: "Invoice number is required"
-            });
-        }
+
 
         if (!invoiceDate) {
             return res.status(400).json({
@@ -46,14 +79,71 @@ exports.createPurchase = async (req, res) => {
             });
         }
 
+        let finalGrnDate = new Date();
+
+        if (grnDate) {
+            finalGrnDate = new Date(grnDate);
+
+            if (grnDate.includes(".")) {
+                const [day, month, year] = grnDate.split(".");
+                finalGrnDate = new Date(`${year}-${month}-${day}`);
+            }
+
+            if (isNaN(finalGrnDate.getTime())) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid GRN date format. Use YYYY-MM-DD or DD.MM.YYYY"
+                });
+            }
+        }
+
+        const finalInvoiceAmount = Number(invoiceAmount);
+        const finalSupplierBillAmount = Number(supplierBillAmount);
+
+        if (isNaN(finalInvoiceAmount) || finalInvoiceAmount <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Invoice amount is required"
+            });
+        }
+
+        if (isNaN(finalSupplierBillAmount) || finalSupplierBillAmount <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Supplier bill amount is required"
+            });
+        }
+
+
+        let finalDueDate = null;
+
+        if (DueDate) {
+            finalDueDate = new Date(DueDate);
+
+            if (DueDate.includes(".")) {
+                const [day, month, year] = DueDate.split(".");
+                finalDueDate = new Date(`${year}-${month}-${day}`);
+            }
+
+            if (isNaN(finalDueDate.getTime())) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid due date format. Use YYYY-MM-DD or DD.MM.YYYY"
+                });
+            }
+        }
+
         const hierarchy = attachHierarchy(req.user);
+
+        const grnNo = await getNextGRNNo(
+            hierarchy.superAdminId,
+            finalGrnDate
+        );
 
         const supplier = await Supplier.findOne({
             _id: supplierId,
             superAdminId: hierarchy.superAdminId
         });
-
-
 
         if (!supplier) {
             return res.status(404).json({
@@ -62,6 +152,8 @@ exports.createPurchase = async (req, res) => {
             });
         }
 
+        let totalGrossAmount = 0;
+        let totalTaxAmount = 0;
         let totalAmount = 0;
 
         const round2 = (num) =>
@@ -72,15 +164,13 @@ exports.createPurchase = async (req, res) => {
         for (const item of items) {
             const productId = item.productId;
 
-            const flavor = item.flavor ? String(item.flavor).trim() : "";
-            const litters = item.litters ? String(item.litters).trim() : "";
-            const mrp = Number(item.mrp);
-            const qty = Number(item.qty);
-            const costPrice = Number(item.costPrice);
-            const sellingPrice = Number(item.sellingPrice || mrp);
-            const priceLevel = item.priceLevel || null;
 
-            const barcode = String(item.barcode || item.code || "").trim();
+
+            const qty = Number(item.qty);
+            const freeQty = Number(item.freeQty || 0);
+
+            const priceLevel = item.priceLevel || null;
+            let barcode = String(item.barcode || item.code || "").trim();
 
             if (!productId) {
                 return res.status(400).json({
@@ -96,19 +186,14 @@ exports.createPurchase = async (req, res) => {
                 });
             }
 
-            if (isNaN(costPrice) || costPrice < 0) {
+            if (isNaN(freeQty) || freeQty < 0) {
                 return res.status(400).json({
                     success: false,
-                    message: "Invalid cost price"
+                    message: "Invalid free quantity"
                 });
             }
 
-            if (isNaN(mrp) || mrp <= 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid MRP"
-                });
-            }
+
 
             const product = await Product.findOne({
                 _id: productId,
@@ -122,13 +207,69 @@ exports.createPurchase = async (req, res) => {
                 });
             }
 
-            const gstpercentage = Number(product.gstRate || 0);
-            const gst = round2((qty * costPrice * gstpercentage) / 100);
+            const netcost = Number(item.netcost ?? item.netCost ?? product.costPrice);
 
+            if (isNaN(netcost) || netcost < 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid net cost"
+                });
+            }
+
+
+            const netAmount = round2(netcost * qty);
+
+            const sellingPrice = Number(item.sellingPrice ?? product.sellingPrice ?? mrp);
+
+            const mrp = Number(item.mrp ?? product.mrp);
+
+            if (isNaN(mrp) || mrp <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid MRP"
+                });
+            }
+
+            const purchaseUnit = product.unit || "pcs";
+
+
+            const purchaseUnitValue = item.unitValue
+                ? Number(item.unitValue)
+                : Number(product.unitValue || 1);
+
+            const isCustomUnitValue = item.unitValue !== undefined;
+
+            const qtyType = item.qtyType || "unit";
+
+            if (!["pcs", "kg", "g"].includes(purchaseUnit)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Unit must be pcs or kg"
+                });
+            }
+
+            if (
+                qtyType === "unit" &&
+                (isNaN(purchaseUnitValue) || purchaseUnitValue <= 0)
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid unitValue is required"
+                });
+            }
+
+            if (!barcode) {
+                const productBarcode = await Barcode.findOne({
+                    productId: product._id,
+                    superAdminId: hierarchy.superAdminId
+                }).sort({ createdAt: -1 });
+
+                if (productBarcode) {
+                    barcode = productBarcode.code;
+                }
+            }
 
             const productMrp = Number(product.mrp || 0);
-            const productFlavors = Array.isArray(product.flavor) ? product.flavor : [];
-            const productLitters = Array.isArray(product.litters) ? product.litters : [];
 
             if (mrp !== productMrp) {
                 return res.status(400).json({
@@ -137,23 +278,121 @@ exports.createPurchase = async (req, res) => {
                 });
             }
 
-            if (flavor && !productFlavors.includes(flavor)) {
+
+            const taxPercentage = Number(product.gstRate || 0);
+
+            const discountPercent = Number(
+                item.discountPercent || item.disPercent || 0
+            );
+
+            const manualDiscountAmount = Number(
+                item.discountAmount || item.disAmount || 0
+            );
+
+            const isGstIncluded = item.isGstIncluded !== false;
+
+            const totalStockQty = qty + freeQty;
+
+            let stockQty = 0;
+
+            if (purchaseUnit === "kg" || purchaseUnit === "g") {
+                if (qtyType === "unit") {
+                    stockQty = totalStockQty * purchaseUnitValue;
+                } else if (qtyType === "kg") {
+                    stockQty = totalStockQty;
+                } else {
+                    return res.status(400).json({
+                        success: false,
+                        message: "qtyType must be unit or kg"
+                    });
+                }
+            } else {
+                stockQty = totalStockQty;
+            }
+
+            const grossAmount = round2(qty * netcost);
+
+            let discountAmount = 0;
+            let finalDiscountPercent = discountPercent;
+
+            if (discountPercent > 0) {
+                discountAmount = round2(grossAmount * discountPercent / 100);
+            } else if (manualDiscountAmount > 0) {
+                discountAmount = round2(manualDiscountAmount);
+                finalDiscountPercent = round2((discountAmount / grossAmount) * 100);
+            }
+
+            if (discountAmount > grossAmount) {
                 return res.status(400).json({
                     success: false,
-                    message: "Selected flavor not found in product"
+                    message: "Discount amount cannot be greater than gross amount"
                 });
             }
 
-            if (litters && !productLitters.includes(litters)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Selected litters not found in product"
-                });
+            const amountAfterDiscount = round2(grossAmount - discountAmount);
+
+            let amount = 0;
+            let taxAmount = 0;
+            let totalCostWithGST = 0;
+
+            if (isGstIncluded) {
+                totalCostWithGST = amountAfterDiscount;
+
+                taxAmount = round2(
+                    amountAfterDiscount * taxPercentage / (100 + taxPercentage)
+                );
+
+                amount = round2(
+                    amountAfterDiscount - taxAmount
+                );
+            } else {
+                amount = amountAfterDiscount;
+                taxAmount = round2(amount * taxPercentage / 100);
+                totalCostWithGST = round2(amount + taxAmount);
             }
+
+            totalGrossAmount = round2(
+                totalGrossAmount + amount
+            );
+
+            totalTaxAmount = round2(
+                totalTaxAmount + taxAmount
+            );
+
+            const Rate = totalStockQty > 0
+                ? round2(amount / totalStockQty)
+                : 0;
+
+            const profitAmount = round2(sellingPrice - netcost);
+
+            const profitPercent = sellingPrice > 0
+                ? round2((profitAmount / sellingPrice) * 100)
+                : 0;
+
+            const roiPercent = netcost > 0
+                ? round2((profitAmount / netcost) * 100)
+                : 0;
+
 
             if (barcode) {
+                const existingBarcode = await Barcode.findOne({
+                    code: barcode,
+                    superAdminId: hierarchy.superAdminId
+                });
+
+                if (
+                    existingBarcode &&
+                    String(existingBarcode.productId) !== String(product._id)
+                ) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Barcode already exists for another product"
+                    });
+                }
+
                 await Barcode.findOneAndUpdate(
                     {
+                        productId: product._id,
                         code: barcode,
                         superAdminId: hierarchy.superAdminId
                     },
@@ -162,13 +401,14 @@ exports.createPurchase = async (req, res) => {
                             productId: product._id,
                             code: barcode,
 
-                            mrp,
-                            sellingPrice,
-                            costPrice,
-                            gstRate: gstpercentage,
+                            mrp: item.mrp || product.mrp || 0,
+                            costPrice: item.costPrice || product.costPrice || 0,
+                            sellingPrice: item.sellingPrice || product.sellingPrice || 0,
+                            gstRate: product.gstRate || 0,
 
-                            flavor,
-                            litters,
+                            unit: purchaseUnit,
+                            unitValue: purchaseUnitValue,
+                            isCustomUnitValue,
 
                             isSold: false,
 
@@ -176,16 +416,20 @@ exports.createPurchase = async (req, res) => {
                             createdBy: req.user.userId
                         },
                         $inc: {
-                            qty: qty,
-                            availableQty: qty
+
+                            qty: stockQty,
+                            availableQty: stockQty
+
                         }
                     },
                     {
                         upsert: true,
                         new: true
                     }
-                );
-            }
+
+                )
+            };
+
 
             if (priceLevel) {
                 await PriceLevel.findOneAndUpdate(
@@ -201,7 +445,7 @@ exports.createPurchase = async (req, res) => {
                         manualPrice: priceLevel.manualPrice || 0,
 
                         autoPricing: priceLevel.autoPricing || {
-                            baseOn: "costPrice",
+                            baseOn: "netcost",
                             profitPercent: 0
                         },
 
@@ -226,13 +470,13 @@ exports.createPurchase = async (req, res) => {
                 },
                 {
                     $inc: {
-                        stock: qty
+                        stock: stockQty
                     }
                 }
             );
 
 
-            totalAmount = round2(totalAmount + (qty * costPrice) + gst);
+            totalAmount = round2(totalAmount + totalCostWithGST);
 
             processedItems.push({
                 productId: product._id,
@@ -244,28 +488,49 @@ exports.createPurchase = async (req, res) => {
 
                 hsnId: product.hsnId || null,
                 hsnCode: product.hsnCode || "",
-                gstpercentage,
-                gst,
 
                 categoryId: product.categoryId?._id,
                 categoryName: product.categoryId?.name || "",
-                brand: product.brand || "",
 
-                flavor,
-                litters,
+                taxPercentage,
+                taxAmount,
+
+                discountPercent: finalDiscountPercent,
+                discountAmount,
+
+                amount,
+                totalCostWithGST,
+                isGstIncluded,
+
+                freeQty,
+                totalStockQty,
+
                 qty,
-                costPrice,
+                qtyType,
+
+                netcost,
+                netAmount,
+                Rate,
                 mrp,
-                sellingPrice,
-                priceLevel,
                 barcode,
 
-                receivedQty: qty,
+                unit: purchaseUnit,
+                unitValue: purchaseUnitValue,
+                isCustomUnitValue,
+
+                sellingPrice,
+                priceLevel,
+
+
+                profitAmount,
+                profitPercent,
+                roiPercent,
+
+                receivedQty: stockQty,
                 pendingQty: 0
             });
         }
 
-        const finalSupplierBillAmount = Number(supplierBillAmount || totalAmount);
         const firstPaidAmount = Number(paidAmount || 0);
 
         if (firstPaidAmount > finalSupplierBillAmount) {
@@ -279,11 +544,23 @@ exports.createPurchase = async (req, res) => {
             finalSupplierBillAmount - firstPaidAmount
         );
 
+        let paymentStatus = "pending";
+
+        if (balanceAmount === 0) {
+            paymentStatus = "paid";
+        } else if (firstPaidAmount > 0) {
+            paymentStatus = "partial";
+        }
+
         const purchase = await Purchase.create({
             supplierId,
             supplierName: supplier.supplierName || "",
             supplierEmail: supplier.email || "",
+            grnNo,
+            grnDate: finalGrnDate,
             invoiceNo,
+            invoiceAmount: finalInvoiceAmount,
+
             invoiceDate: finalInvoiceDate,
             items: processedItems,
             totalAmount,
@@ -291,6 +568,8 @@ exports.createPurchase = async (req, res) => {
             supplierBillAmount: finalSupplierBillAmount,
             paidAmount: firstPaidAmount,
             balanceAmount,
+            DueDate: balanceAmount > 0 ? finalDueDate : null,
+            paymentStatus,
 
             paymentHistory: firstPaidAmount > 0 ? [
                 {
@@ -314,6 +593,11 @@ exports.createPurchase = async (req, res) => {
             data: {
                 _id: responsePurchase._id,
 
+                superAdminId: responsePurchase.superAdminId,
+                adminId: responsePurchase.adminId,
+                createdBy: responsePurchase.createdBy,
+
+
                 supplier: {
                     id: String(supplier._id),
 
@@ -324,11 +608,32 @@ exports.createPurchase = async (req, res) => {
                     email: String(supplier.email || "")
                 },
 
+                grnNo: responsePurchase.grnNo,
+
+                grnDate: responsePurchase.grnDate
+                    ? new Date(responsePurchase.grnDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
+
                 invoiceNo: responsePurchase.invoiceNo,
+                invoiceAmount: responsePurchase.invoiceAmount,
 
-                invoiceDate: responsePurchase.invoiceDate,
+                invoiceDate: responsePurchase.invoiceDate
+                    ? new Date(responsePurchase.invoiceDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
 
+                DueDate: responsePurchase.DueDate
+                    ? new Date(responsePurchase.DueDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
                 totalAmount: round2(responsePurchase.totalAmount),
+                totalGrossAmount: round2(totalGrossAmount),
+
+                paymentStatus: responsePurchase.paymentStatus,
 
                 supplierBillAmount: round2(responsePurchase.supplierBillAmount),
                 paidAmount: round2(responsePurchase.paidAmount),
@@ -336,19 +641,35 @@ exports.createPurchase = async (req, res) => {
                 paymentStatus: responsePurchase.paymentStatus,
 
                 items: responsePurchase.items.map((item) => ({
+
+                    freeQty: item.freeQty || 0,
+                    totalStockQty: item.totalStockQty || 0,
+
+
+                    discountPercent: item.discountPercent || 0,
+                    discountAmount: round2(item.discountAmount || 0),
+
+                    amount: round2(item.amount || 0),
+                    totalCostWithGST: round2(item.totalCostWithGST || 0),
+                    isGstIncluded: item.isGstIncluded,
+
+
+                    profitPercent: round2(item.profitPercent || 0),
+                    roiPercent: round2(item.roiPercent || 0),
+
+
                     _id: item._id,
 
                     productId: item.productId?._id,
 
                     productName: item.productId?.name || "",
 
+                    isCustomUnitValue: item.isCustomUnitValue || false,
+
                     description:
                         item.description || "",
 
-                    brand:
-                        item.productId?.brand ||
-                        item.brand ||
-                        "",
+
 
                     hsnCode:
                         item.hsnCode || "",
@@ -356,23 +677,27 @@ exports.createPurchase = async (req, res) => {
                     categoryName:
                         item.categoryName || "",
 
-                    gstpercentage:
-                        item.gstpercentage || 0,
+                    taxPercentage: item.taxPercentage || 0,
 
                     categoryName:
                         item.categoryName || "",
 
-                    flavor:
-                        item.flavor || "",
-
-                    litters:
-                        item.litters || "",
-
                     qty:
                         item.qty || 0,
 
-                    costPrice:
-                        item.costPrice || 0,
+                    netcost:
+                        round2(item.netcost || 0),
+
+                    netAmount: round2(item.netAmount || 0),
+
+                    Rate:
+                        round2(item.Rate || 0),
+
+                    unit: item.unit || "",
+                    unitValue: item.unitValue || 1,
+
+                    profitAmount:
+                        round2(item.profitAmount || 0),
 
                     mrp:
                         item.mrp || 0,
@@ -380,7 +705,7 @@ exports.createPurchase = async (req, res) => {
                     sellingPrice:
                         item.sellingPrice || 0,
 
-                    gst: round2(item.gst || 0),
+                    taxAmount: round2(item.taxAmount || 0),
 
                     priceLevel:
                         item.priceLevel || null,
@@ -408,6 +733,167 @@ exports.createPurchase = async (req, res) => {
 };
 
 
+
+exports.calculatePurchase = async (req, res) => {
+    try {
+        const { items, paidAmount = 0, supplierBillAmount } = req.body;
+
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Items are required"
+            });
+        }
+
+        const round2 = (num) =>
+            Math.round((Number(num) + Number.EPSILON) * 100) / 100;
+
+        let totalAmount = 0;
+        let totalGrossAmount = 0;
+        let totalTaxAmount = 0;
+
+        const calculatedItems = items.map((item, index) => {
+            const qty = Number(item.qty);
+            const freeQty = Number(item.freeQty || 0);
+            const totalStockQty = qty + freeQty;
+
+            const netcost = Number(item.netcost || item.purchasePrice || item.netCost);
+            const mrp = Number(item.mrp);
+            const sellingPrice = Number(item.sellingPrice || mrp);
+            const taxPercentage = Number(item.gst || item.gstRate || item.taxPercentage || 0);
+
+            const discountPercent = Number(item.discountPercent || 0);
+            const discountAmountInput = Number(item.discountAmount || 0);
+            const isGstIncluded = item.isGstIncluded !== false;
+
+            if (isNaN(qty) || qty <= 0) {
+                throw new Error(`Invalid quantity at item ${index + 1}`);
+            }
+
+            if (isNaN(netcost) || netcost < 0) {
+                throw new Error(`Invalid purchase price at item ${index + 1}`);
+            }
+
+            if (isNaN(mrp) || mrp <= 0) {
+                throw new Error(`Invalid MRP at item ${index + 1}`);
+            }
+
+            const netAmount = round2(netcost * qty);
+            const grossAmount = round2(qty * netcost);
+
+            const percentDiscountAmount = round2(
+                grossAmount * discountPercent / 100
+            );
+
+            const discountAmount = round2(
+                percentDiscountAmount + discountAmountInput
+            );
+
+            const amountAfterDiscount = round2(grossAmount - discountAmount);
+
+            let amount = 0;
+            let taxAmount = 0;
+            let totalCostWithGST = 0;
+
+            if (isGstIncluded) {
+                totalCostWithGST = amountAfterDiscount;
+
+                taxAmount = round2(
+                    amountAfterDiscount * taxPercentage / 100
+                );
+
+                amount = round2(
+                    amountAfterDiscount - taxAmount
+                );
+            } else {
+                amount = amountAfterDiscount;
+
+                taxAmount = round2(
+                    amount * taxPercentage / 100
+                );
+
+                totalCostWithGST = round2(
+                    amount + taxAmount
+                );
+            }
+
+            totalGrossAmount = round2(totalGrossAmount + amount);
+            totalTaxAmount = round2(totalTaxAmount + taxAmount);
+            totalAmount = round2(totalAmount + totalCostWithGST);
+
+            const Rate = totalStockQty > 0
+                ? round2(amount / totalStockQty)
+                : 0;
+
+            const profitAmount = round2(sellingPrice - netcost);
+
+            const profitPercent = sellingPrice > 0
+                ? round2((profitAmount / sellingPrice) * 100)
+                : 0;
+
+            const roiPercent = netcost > 0
+                ? round2((profitAmount / netcost) * 100)
+                : 0;
+
+            return {
+                productName: item.productName || item.itemName || "",
+                qty,
+                freeQty,
+                totalStockQty,
+
+                discountPercent,
+                discountAmount,
+
+                amount,
+                totalCostWithGST,
+                isGstIncluded,
+
+                profitPercent,
+                roiPercent,
+
+                taxPercentage,
+                netcost,
+                netAmount,
+                Rate,
+                profitAmount,
+                mrp,
+                sellingPrice,
+                taxAmount,
+
+                barcode: item.barcode || "",
+                receivedQty: totalStockQty,
+                pendingQty: 0
+            };
+        });
+
+        const finalSupplierBillAmount = Number(supplierBillAmount || totalAmount);
+        const finalPaidAmount = Number(paidAmount || 0);
+        const balanceAmount = round2(finalSupplierBillAmount - finalPaidAmount);
+
+        return res.status(200).json({
+            success: true,
+            message: "Purchase calculation successful",
+            data: {
+                totalAmount: round2(totalAmount),
+                totalGrossAmount: round2(totalGrossAmount),
+                totalTaxAmount: round2(totalTaxAmount),
+                supplierBillAmount: round2(finalSupplierBillAmount),
+                paidAmount: round2(finalPaidAmount),
+                balanceAmount,
+                items: calculatedItems
+            }
+        });
+
+    } catch (err) {
+        return res.status(400).json({
+            success: false,
+            message: err.message
+        });
+    }
+};
+
+
+
 exports.getProductForPurchase = async (req, res) => {
     try {
         const { productId } = req.params;
@@ -433,6 +919,28 @@ exports.getProductForPurchase = async (req, res) => {
             });
         }
 
+        let barcode = String(item.barcode || item.code || "").trim();
+
+        if (!barcode) {
+            const productBarcode = await Barcode.findOne({
+                productId: product._id,
+                superAdminId: hierarchy.superAdminId
+            }).sort({ createdAt: -1 });
+
+            if (productBarcode) {
+                barcode = productBarcode.code;
+            }
+        }
+
+        const productMrp = Number(product.mrp || 0);
+
+        if (mrp !== productMrp) {
+            return res.status(400).json({
+                success: false,
+                message: "Selected MRP not found in product"
+            });
+        }
+
         return res.status(200).json({
             success: true,
             data: {
@@ -442,12 +950,11 @@ exports.getProductForPurchase = async (req, res) => {
                 categoryId: product.categoryId,
                 categoryName: product.categoryName,
                 hsnCode: product.hsnCode,
-                gstRate: product.gstRate,
+                taxRate: product.gstRate,
                 mrp: product.mrp,
                 costPrice: product.costPrice,
                 sellingPrice: product.sellingPrice,
-                flavor: product.flavor,
-                litters: product.litters,
+
                 kg: product.kg,
                 currentStock: product.stock
             }
@@ -630,6 +1137,9 @@ exports.getPurchases = async (req, res) => {
 
         const hierarchy = attachHierarchy(req.user);
 
+        const round2 = (num) =>
+            Math.round((Number(num) + Number.EPSILON) * 100) / 100;
+
         const purchases = await Purchase.find({
             superAdminId: hierarchy.superAdminId
         })
@@ -637,57 +1147,111 @@ exports.getPurchases = async (req, res) => {
             .populate("items.productId", "name brand")
             .sort({ createdAt: -1 });
 
-        const formatted = purchases.map((purchase) => ({
-            _id: purchase._id,
-            productName: purchase.items[0]?.productId?.name || "",
+        const formatted = purchases.map((purchase) => {
+            const totalGrossAmount = purchase.items.reduce(
+                (sum, item) => sum + Number(item.amount || 0),
+                0
+            );
 
-            supplier: {
-                id: purchase.supplierId?._id || "",
-                name: purchase.supplierId?.supplierName || purchase.supplierName || "",
-                mobile: purchase.supplierId?.mobile || "",
-                email: purchase.supplierId?.email || purchase.supplierEmail || ""
-            },
+            const totalTaxAmount = purchase.items.reduce(
+                (sum, item) => sum + Number(item.taxAmount || 0),
+                0
+            );
 
-            invoiceNo: purchase.invoiceNo,
-            invoiceDate: purchase.invoiceDate,
-            totalAmount: purchase.totalAmount || 0,
+            return {
+                _id: purchase._id,
+                productName: purchase.items[0]?.productId?.name || "",
 
-            supplierBillAmount: purchase.supplierBillAmount || 0,
-            paidAmount: purchase.paidAmount || 0,
-            balanceAmount: purchase.balanceAmount || 0,
-            paymentHistory: purchase.paymentHistory || [],
+                supplier: {
+                    id: purchase.supplierId?._id || "",
+                    name: purchase.supplierId?.supplierName || purchase.supplierName || "",
+                    mobile: purchase.supplierId?.mobile || "",
+                    email: purchase.supplierId?.email || purchase.supplierEmail || ""
+                },
 
-            items: purchase.items.map((item) => ({
-                _id: item._id,
+                grnNo: purchase.grnNo || "",
 
-                productId: item.productId?._id || item.productId || "",
-                productName: item.productId?.name || item.productName || "",
+                grnDate: purchase.grnDate
+                    ? new Date(purchase.grnDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
 
-                brand: item.productId?.brand || item.brand || "",
-                hsnCode: item.hsnCode || "",
-                gstpercentage: item.gstpercentage || 0,
-                categoryName: item.categoryName || "",
+                invoiceNo: purchase.invoiceNo,
 
-                flavor: item.flavor || "",
-                litters: item.litters || "",
+                invoiceDate: purchase.invoiceDate
+                    ? new Date(purchase.invoiceDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
 
-                qty: item.qty || 0,
-                costPrice: item.costPrice || 0,
-                mrp: item.mrp || 0,
-                sellingPrice: item.sellingPrice || 0,
-                gst: item.gst || 0,
+                DueDate: purchase.DueDate
+                    ? new Date(purchase.DueDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
 
-                barcode: item.barcode || "",
-                receivedQty: item.receivedQty || 0,
-                pendingQty: item.pendingQty || 0
-            })),
+                totalAmount: round2(purchase.totalAmount || 0),
+                totalGrossAmount: Math.round((totalGrossAmount + Number.EPSILON) * 100) / 100,
+                totalTaxAmount: Math.round((totalTaxAmount + Number.EPSILON) * 100) / 100,
 
-            superAdminId: purchase.superAdminId || null,
-            adminId: purchase.adminId || null,
-            createdBy: purchase.createdBy || null,
-            createdAt: purchase.createdAt,
-            updatedAt: purchase.updatedAt
-        }));
+                supplierBillAmount: round2(purchase.supplierBillAmount || 0),
+                paidAmount: round2(purchase.paidAmount || 0),
+                balanceAmount: round2(purchase.balanceAmount || 0),
+
+                paymentStatus: purchase.paymentStatus || "pending",
+
+                paymentHistory: purchase.paymentHistory || [],
+
+                items: purchase.items.map((item) => ({
+                    _id: item._id,
+
+                    productId: item.productId?._id || item.productId || "",
+                    productName: item.productId?.name || item.productName || "",
+
+                    description: item.description || "",
+
+                    hsnCode: item.hsnCode || "",
+                    taxPercentage: item.taxPercentage || 0,
+                    categoryName: item.categoryName || "",
+
+                    qty: item.qty || 0,
+                    freeQty: item.freeQty || 0,
+                    totalStockQty: item.totalStockQty || 0,
+
+                    qtyType: item.qtyType || "unit",
+                    stockQty: item.receivedQty || 0,
+
+                    unit: item.unit || "pcs",
+                    unitValue: item.unitValue || 1,
+                    isCustomUnitValue: item.isCustomUnitValue || false,
+
+                    netcost: round2(item.netcost || 0),
+                    netAmount: round2(item.netAmount || 0),
+                    Rate: round2(item.Rate || 0),
+
+                    amount: round2(item.amount || 0),
+                    taxAmount: round2(item.taxAmount || 0),
+                    totalCostWithGST: round2(item.totalCostWithGST || 0),
+                    isGstIncluded: item.isGstIncluded,
+
+                    discountPercent: item.discountPercent || 0,
+                    discountAmount: round2(item.discountAmount || 0),
+
+                    profitAmount: round2(item.profitAmount || 0),
+                    profitPercent: round2(item.profitPercent || 0),
+                    roiPercent: round2(item.roiPercent || 0),
+
+                    mrp: item.mrp || 0,
+                    sellingPrice: item.sellingPrice || 0,
+
+                    barcode: item.barcode || "",
+
+                    receivedQty: item.receivedQty || 0,
+                    pendingQty: item.pendingQty || 0
+                })),
+            }
+        });
 
         return res.status(200).json({
             success: true,
@@ -703,6 +1267,8 @@ exports.getPurchases = async (req, res) => {
         });
     }
 };
+
+
 
 exports.getPurchaseById = async (req, res) => {
     try {
@@ -730,6 +1296,19 @@ exports.getPurchaseById = async (req, res) => {
             });
         }
 
+        const round2 = (num) =>
+            Math.round((Number(num) + Number.EPSILON) * 100) / 100;
+
+        const totalGrossAmount = purchase.items.reduce(
+            (sum, item) => sum + Number(item.amount || 0),
+            0
+        );
+
+        const totalTaxAmount = purchase.items.reduce(
+            (sum, item) => sum + Number(item.taxAmount || 0),
+            0
+        );
+
         return res.status(200).json({
             success: true,
             message: "Purchase fetched successfully",
@@ -743,16 +1322,38 @@ exports.getPurchaseById = async (req, res) => {
                     email: purchase.supplierId?.email || ""
                 },
 
-                invoiceNo: purchase.invoiceNo,
-                invoiceDate: purchase.invoiceDate
-                    ? new Date(purchase.invoiceDate).toLocaleDateString("en-CA")
+                grnNo: purchase.grnNo || "",
+
+                grnDate: purchase.grnDate
+                    ? new Date(purchase.grnDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
                     : "",
 
-                totalAmount: purchase.totalAmount || 0,
-                supplierBillAmount: purchase.supplierBillAmount || 0,
-                paidAmount: purchase.paidAmount || 0,
-                balanceAmount: purchase.balanceAmount || 0,
+                invoiceNo: purchase.invoiceNo,
+
+                invoiceDate: purchase.invoiceDate
+                    ? new Date(purchase.invoiceDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
+
+                DueDate: purchase.DueDate
+                    ? new Date(purchase.DueDate)
+                        .toLocaleDateString("en-GB")
+                        .replace(/\//g, "-")
+                    : "",
+
+                totalAmount: round2(purchase.totalAmount || 0),
+                totalGrossAmount: round2(totalGrossAmount),
+                totalTaxAmount: round2(totalTaxAmount),
+
+                supplierBillAmount: round2(purchase.supplierBillAmount || 0),
+                paidAmount: round2(purchase.paidAmount || 0),
+                balanceAmount: round2(purchase.balanceAmount || 0),
+
                 paymentStatus: purchase.paymentStatus || "",
+
                 paymentHistory: purchase.paymentHistory || [],
 
                 superAdminId: purchase.superAdminId || null,
@@ -767,8 +1368,8 @@ exports.getPurchaseById = async (req, res) => {
                     productId: item.productId?._id || item.productId,
 
                     productName:
-                        item.productName ||
                         item.productId?.name ||
+                        item.productName ||
                         "",
 
                     description:
@@ -776,22 +1377,40 @@ exports.getPurchaseById = async (req, res) => {
                         item.productId?.description ||
                         "",
 
-                    brand:
-                        item.brand ||
-                        item.productId?.brand ||
-                        "",
-
                     hsnCode: item.hsnCode || "",
-                    gstpercentage: item.gstpercentage || 0,
+                    taxPercentage: item.taxPercentage || 0,
                     categoryName: item.categoryName || "",
 
-                    flavor: item.flavor || "",
-                    litters: item.litters || "",
                     qty: item.qty || 0,
-                    costPrice: item.costPrice || 0,
+                    freeQty: item.freeQty || 0,
+                    totalStockQty: item.totalStockQty || 0,
+
+                    qtyType: item.qtyType || "unit",
+                    stockQty: item.receivedQty || 0,
+
+                    unit: item.unit || "pcs",
+                    unitValue: item.unitValue || 1,
+                    isCustomUnitValue: item.isCustomUnitValue || false,
+
+                    netcost: round2(item.netcost || 0),
+                    netAmount: round2(item.netAmount || 0),
+                    Rate: round2(item.Rate || 0),
+
+                    amount: round2(item.amount || 0),
+                    taxAmount: round2(item.taxAmount || 0),
+                    totalCostWithGST: round2(item.totalCostWithGST || 0),
+                    isGstIncluded: item.isGstIncluded,
+
+                    discountPercent: item.discountPercent || 0,
+                    discountAmount: round2(item.discountAmount || 0),
+
+                    profitAmount: round2(item.profitAmount || 0),
+                    profitPercent: round2(item.profitPercent || 0),
+                    roiPercent: round2(item.roiPercent || 0),
+
                     mrp: item.mrp || 0,
                     sellingPrice: item.sellingPrice || 0,
-                    gst: item.gst || 0,
+
                     barcode: item.barcode || "",
                     receivedQty: item.receivedQty || 0,
                     pendingQty: item.pendingQty || 0
@@ -811,9 +1430,22 @@ exports.getPurchaseById = async (req, res) => {
 exports.updateSupplierBill = async (req, res) => {
     try {
         const { purchaseId } = req.params;
-        const { amount, note } = req.body;
+        const { amount, note, paymentType } = req.body;
 
         const payAmount = Number(amount);
+
+        const allowedPaymentTypes = ["cash", "upi", "card", "bank", "cheque"];
+
+        const finalPaymentType = paymentType
+            ? String(paymentType).trim().toLowerCase()
+            : "cash";
+
+        if (!allowedPaymentTypes.includes(finalPaymentType)) {
+            return res.status(400).json({
+                success: false,
+                message: "Payment type must be cash, upi, card, bank or cheque"
+            });
+        }
 
         if (isNaN(payAmount) || payAmount <= 0) {
             return res.status(400).json({
@@ -821,6 +1453,8 @@ exports.updateSupplierBill = async (req, res) => {
                 message: "Valid payment amount is required"
             });
         }
+
+
 
         const hierarchy = attachHierarchy(req.user);
 
@@ -846,9 +1480,22 @@ exports.updateSupplierBill = async (req, res) => {
         purchase.paidAmount += payAmount;
         purchase.balanceAmount -= payAmount;
 
+        purchase.paidAmount = Number(purchase.paidAmount.toFixed(2));
+        purchase.balanceAmount = Number(purchase.balanceAmount.toFixed(2));
+
+        if (purchase.balanceAmount <= 0) {
+            purchase.paymentStatus = "paid";
+        } else if (purchase.paidAmount > 0) {
+            purchase.paymentStatus = "partial";
+        } else {
+            purchase.paymentStatus = "due";
+        }
+
         purchase.paymentHistory.push({
             amount: payAmount,
-            note: note || "Supplier payment"
+            paymentType: finalPaymentType,
+            note: note || "Supplier payment",
+            paidDate: new Date()
         });
 
         await purchase.save();
@@ -861,6 +1508,7 @@ exports.updateSupplierBill = async (req, res) => {
                 supplierBillAmount: purchase.supplierBillAmount,
                 paidAmount: purchase.paidAmount,
                 balanceAmount: purchase.balanceAmount,
+                paymentStatus: purchase.paymentStatus,
                 paymentHistory: purchase.paymentHistory
             }
         });
@@ -872,26 +1520,38 @@ exports.updateSupplierBill = async (req, res) => {
             error: err.message
         });
     }
-}
+};
+
 
 exports.updatePurchase = async (req, res) => {
     try {
-
         const hierarchy = attachHierarchy(req.user);
-
         const { id } = req.params;
 
         const {
             supplierId,
             invoiceNo,
             invoiceDate,
-            items
+            items,
+            supplierBillAmount,
+            paidAmount,
+            DueDate
         } = req.body;
+
+        const round2 = (num) =>
+            Math.round((Number(num) + Number.EPSILON) * 100) / 100;
 
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid purchase id"
+            });
+        }
+
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Items are required"
             });
         }
 
@@ -907,8 +1567,15 @@ exports.updatePurchase = async (req, res) => {
             });
         }
 
-
+        // 1. Reverse old stock + old barcode stock
         for (const oldItem of purchase.items) {
+            const oldStockQty = Number(
+                oldItem.receivedQty ||
+                oldItem.stockQty ||
+                oldItem.totalStockQty ||
+                oldItem.qty ||
+                0
+            );
 
             await Product.updateOne(
                 {
@@ -916,21 +1583,45 @@ exports.updatePurchase = async (req, res) => {
                     superAdminId: hierarchy.superAdminId
                 },
                 {
-                    $inc: {
-                        stock: -oldItem.qty
-                    }
+                    $inc: { stock: -oldStockQty }
                 }
             );
+
+            if (oldItem.barcode) {
+                await Barcode.updateOne(
+                    {
+                        productId: oldItem.productId,
+                        code: oldItem.barcode,
+                        superAdminId: hierarchy.superAdminId
+                    },
+                    {
+                        $inc: {
+                            qty: -oldStockQty,
+                            availableQty: -oldStockQty
+                        }
+                    }
+                );
+            }
         }
 
         let processedItems = [];
         let totalAmount = 0;
-
+        let totalGrossAmount = 0;
+        let totalTaxAmount = 0;
 
         for (const item of items) {
+            const productId = item.productId;
+            let barcode = String(item.barcode || item.code || "").trim();
+
+            if (!productId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Product id is required"
+                });
+            }
 
             const product = await Product.findOne({
-                _id: item.productId,
+                _id: productId,
                 superAdminId: hierarchy.superAdminId
             }).populate("categoryId", "name");
 
@@ -942,90 +1633,317 @@ exports.updatePurchase = async (req, res) => {
             }
 
             const qty = Number(item.qty);
-            const costPrice = Number(item.costPrice);
+            const freeQty = Number(item.freeQty || 0);
+            const totalStockQty = qty + freeQty;
+
+            const netcost = Number(item.netcost || item.netCost);
+            const netAmount = round2(netcost * qty);
+
             const mrp = Number(item.mrp);
-            const sellingPrice =
-                Number(item.sellingPrice || mrp);
 
-            const gstpercentage =
-                Number(product.gstRate || 0);
+            const productMrp = Number(product.mrp || 0);
 
-            const gst =
-                (qty * costPrice * gstpercentage) / 100;
+            if (mrp !== productMrp) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Selected MRP not found in product"
+                });
+            }
 
+            const sellingPrice = Number(item.sellingPrice || mrp);
 
+            if (isNaN(qty) || qty <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid quantity"
+                });
+            }
+
+            if (isNaN(freeQty) || freeQty < 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid free quantity"
+                });
+            }
+
+            if (isNaN(netcost) || netcost < 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid net cost"
+                });
+            }
+
+            if (isNaN(mrp) || mrp <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid MRP"
+                });
+            }
+
+            const purchaseUnit = product.unit || "pcs";
+
+            const purchaseUnitValue = item.unitValue
+                ? Number(item.unitValue)
+                : Number(product.unitValue || 1);
+
+            const isCustomUnitValue = item.unitValue !== undefined;
+            const qtyType = item.qtyType || "unit";
+
+            if (!["pcs", "kg", "g"].includes(purchaseUnit)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Unit must be pcs, kg or g"
+                });
+            }
+
+            if (
+                qtyType === "unit" &&
+                (isNaN(purchaseUnitValue) || purchaseUnitValue <= 0)
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid unitValue is required"
+                });
+            }
+
+            let stockQty = 0;
+
+            if (purchaseUnit === "kg" || purchaseUnit === "g") {
+                if (qtyType === "unit") {
+                    stockQty = totalStockQty * purchaseUnitValue;
+                } else if (qtyType === "kg") {
+                    stockQty = totalStockQty;
+                } else {
+                    return res.status(400).json({
+                        success: false,
+                        message: "qtyType must be unit or kg"
+                    });
+                }
+            } else {
+                stockQty = totalStockQty;
+            }
+
+            if (!barcode) {
+                const productBarcode = await Barcode.findOne({
+                    productId: product._id,
+                    superAdminId: hierarchy.superAdminId
+                }).sort({ createdAt: -1 });
+
+                if (productBarcode) {
+                    barcode = productBarcode.code;
+                }
+            }
+
+            if (barcode) {
+                const existingBarcode = await Barcode.findOne({
+                    code: barcode,
+                    superAdminId: hierarchy.superAdminId
+                });
+
+                if (
+                    existingBarcode &&
+                    String(existingBarcode.productId) !== String(product._id)
+                ) {
+                    return res.status(400).json({
+                        success: false,
+                        message: "Barcode already exists for another product"
+                    });
+                }
+            }
+
+            const taxPercentage = Number(product.gstRate || 0);
+
+            const discountPercent = Number(item.discountPercent || item.disPercent || 0);
+            const manualDiscountAmount = Number(item.discountAmount || item.disAmount || 0);
+            const isGstIncluded = item.isGstIncluded !== false;
+
+            const grossAmount = round2(qty * netcost);
+
+            const percentDiscountAmount = round2(
+                grossAmount * discountPercent / 100
+            );
+
+            const discountAmount = round2(
+                percentDiscountAmount + manualDiscountAmount
+            );
+
+            if (discountAmount > grossAmount) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Discount amount cannot be greater than gross amount"
+                });
+            }
+
+            const amountAfterDiscount = round2(grossAmount - discountAmount);
+
+            let amount = 0;
+            let taxAmount = 0;
+            let totalCostWithGST = 0;
+
+            if (isGstIncluded) {
+                totalCostWithGST = amountAfterDiscount;
+
+                taxAmount = round2(
+                    amountAfterDiscount * taxPercentage / (100 + taxPercentage)
+                );
+
+                amount = round2(amountAfterDiscount - taxAmount);
+            } else {
+                amount = amountAfterDiscount;
+                taxAmount = round2(amount * taxPercentage / 100);
+                totalCostWithGST = round2(amount + taxAmount);
+            }
+
+            totalGrossAmount = round2(totalGrossAmount + amount);
+            totalTaxAmount = round2(totalTaxAmount + taxAmount);
+            totalAmount = round2(totalAmount + totalCostWithGST);
+
+            const Rate = totalStockQty > 0
+                ? round2(amount / totalStockQty)
+                : 0;
+
+            const profitAmount = round2(sellingPrice - netcost);
+
+            const profitPercent = sellingPrice > 0
+                ? round2((profitAmount / sellingPrice) * 100)
+                : 0;
+
+            const roiPercent = netcost > 0
+                ? round2((profitAmount / netcost) * 100)
+                : 0;
+
+            // 2. Add new product stock
             await Product.updateOne(
                 {
                     _id: product._id,
                     superAdminId: hierarchy.superAdminId
                 },
                 {
-                    $inc: {
-                        stock: qty
-                    }
+                    $inc: { stock: stockQty }
                 }
             );
 
-            totalAmount +=
-                (qty * costPrice) + gst;
+
+            if (barcode) {
+                await Barcode.findOneAndUpdate(
+                    {
+                        productId: product._id,
+                        code: barcode,
+                        superAdminId: hierarchy.superAdminId
+                    },
+                    {
+                        $set: {
+                            productId: product._id,
+                            code: barcode,
+
+                            mrp: item.mrp || product.mrp || 0,
+                            costPrice: item.costPrice || product.costPrice || 0,
+                            sellingPrice: item.sellingPrice || product.sellingPrice || 0,
+                            gstRate: product.gstRate || 0,
+
+                            unit: purchaseUnit,
+                            unitValue: purchaseUnitValue,
+                            isCustomUnitValue,
+
+                            isSold: false,
+
+                            ...hierarchy,
+                            createdBy: req.user.userId
+                        },
+                        $inc: {
+                            qty: stockQty,
+                            availableQty: stockQty
+                        }
+                    },
+                    {
+                        upsert: true,
+                        new: true
+                    }
+                );
+            }
+
+            if (item.priceLevel) {
+                await PriceLevel.findOneAndUpdate(
+                    {
+                        productId: product._id,
+                        superAdminId: hierarchy.superAdminId
+                    },
+                    {
+                        productId: product._id,
+                        pricingType: item.priceLevel.pricingType,
+                        manualPrice: item.priceLevel.manualPrice || 0,
+                        autoPricing: item.priceLevel.autoPricing || {
+                            baseOn: "netcost",
+                            profitPercent: 0
+                        },
+                        slabs: item.priceLevel.slabs || [],
+                        ...hierarchy,
+                        createdBy: req.user.userId,
+                        isActive: true
+                    },
+                    {
+                        upsert: true,
+                        new: true,
+                        runValidators: true
+                    }
+                );
+            }
 
             processedItems.push({
-
                 productId: product._id,
+                productName: product.name || "",
+
+                description: item.description
+                    ? String(item.description).trim()
+                    : product.description || "",
 
                 hsnId: product.hsnId || null,
+                hsnCode: product.hsnCode || "",
 
-                hsnCode:
-                    product.hsnCode || "",
+                categoryId: product.categoryId?._id,
+                categoryName: product.categoryId?.name || "",
 
-                gstpercentage,
-                gst,
+                taxPercentage,
+                taxAmount,
 
-                categoryId:
-                    product.categoryId?._id,
+                discountPercent,
+                discountAmount,
+                amount,
+                totalCostWithGST,
+                isGstIncluded,
 
-                categoryName:
-                    product.categoryId?.name || "",
-
-                brand:
-                    product.brand || "",
-
-                description:
-                    product.description || "",
-
-                flavor:
-                    item.flavor || "",
-
-                litters:
-                    item.litters || "",
+                freeQty,
+                totalStockQty,
 
                 qty,
-                costPrice,
+                qtyType,
+
+                netcost,
+                netAmount,
+                Rate,
                 mrp,
                 sellingPrice,
 
-                barcode:
-                    item.barcode || "",
+                unit: purchaseUnit,
+                unitValue: purchaseUnitValue,
+                isCustomUnitValue,
 
-                receivedQty:
-                    item.receivedQty || 0,
+                priceLevel: item.priceLevel || null,
+                barcode,
 
-                pendingQty:
-                    item.pendingQty || qty,
+                profitAmount,
+                profitPercent,
+                roiPercent,
 
-                superAdminId: purchase.superAdminId || null,
-                adminId: purchase.adminId || null,
-                createdBy: purchase.createdBy || null,
-                createdAt: purchase.createdAt,
-                updatedAt: purchase.updatedAt
+                stockQty,
+                receivedQty: stockQty,
+                pendingQty: 0
             });
         }
-
 
         let supplierData = {};
 
         if (supplierId) {
-
             const supplier = await Supplier.findOne({
                 _id: supplierId,
                 superAdminId: hierarchy.superAdminId
@@ -1040,44 +1958,63 @@ exports.updatePurchase = async (req, res) => {
 
             supplierData = {
                 supplierId: supplier._id,
-                supplierName:
-                    supplier.supplierName || "",
-
-                supplierEmail:
-                    supplier.email || ""
+                supplierName: supplier.supplierName || "",
+                supplierEmail: supplier.email || ""
             };
         }
 
-
-        purchase.invoiceNo =
-            invoiceNo || purchase.invoiceNo;
-
-        purchase.invoiceDate =
-            invoiceDate || purchase.invoiceDate;
-
+        purchase.invoiceNo = invoiceNo || purchase.invoiceNo;
+        purchase.invoiceDate = invoiceDate || purchase.invoiceDate;
         purchase.items = processedItems;
-
         purchase.totalAmount = totalAmount;
+
+        const finalSupplierBillAmount = Number(supplierBillAmount || totalAmount);
+        const finalPaidAmount = Number(paidAmount ?? purchase.paidAmount ?? 0);
+
+        if (finalPaidAmount > finalSupplierBillAmount) {
+            return res.status(400).json({
+                success: false,
+                message: "Paid amount cannot be greater than supplier bill amount"
+            });
+        }
+
+        const balanceAmount = round2(finalSupplierBillAmount - finalPaidAmount);
+
+        let paymentStatus = "pending";
+
+        if (balanceAmount === 0) {
+            paymentStatus = "paid";
+        } else if (finalPaidAmount > 0) {
+            paymentStatus = "partial";
+        }
+
+        purchase.supplierBillAmount = finalSupplierBillAmount;
+        purchase.paidAmount = finalPaidAmount;
+        purchase.balanceAmount = balanceAmount;
+        purchase.paymentStatus = paymentStatus;
+        purchase.DueDate = balanceAmount > 0 ? DueDate || purchase.DueDate : null;
 
         Object.assign(purchase, supplierData);
 
         await purchase.save();
 
-        const updatedPurchase =
-            await Purchase.findById(purchase._id)
-                .populate(
-                    "items.productId",
-                    "name brand"
-                );
-
         return res.status(200).json({
             success: true,
             message: "Purchase updated successfully",
-            data: updatedPurchase
+            data: {
+                _id: purchase._id,
+                invoiceNo: purchase.invoiceNo,
+                invoiceDate: purchase.invoiceDate,
+
+                totalAmount: round2(totalAmount),
+                totalGrossAmount: round2(totalGrossAmount),
+                totalTaxAmount: round2(totalTaxAmount),
+
+                items: processedItems
+            }
         });
 
     } catch (err) {
-
         return res.status(500).json({
             success: false,
             message: "Server error",

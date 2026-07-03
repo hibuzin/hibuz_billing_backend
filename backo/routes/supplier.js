@@ -10,6 +10,7 @@ const {
     getSupplierBalances,
     getallsuppliers,
     suppliersearch,
+    getAllSupplierPurchases,
     supplierPurchases,
     supplierProductWiseSummary,
     supplierbyid,
@@ -58,6 +59,12 @@ router.get(
 
 );
 
+router.get(
+    "/supplier-purchases",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    getAllSupplierPurchases
+);
 
 router.get(
     "/:supplierId/purchases",

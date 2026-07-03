@@ -7,25 +7,41 @@ const category = require("../models/category");
 
 const Hsn = require("../models/hsn");
 
+const generateItemCode = async (superAdminId) => {
+    let code;
+    let exists = true;
+
+    while (exists) {
+        code = Math.floor(10000 + Math.random() * 90000).toString();
+
+        exists = await Product.findOne({
+            itemCode: code,
+            superAdminId
+        });
+    }
+
+    return code;
+};
 
 exports.productcreate = async (req, res) => {
 
     try {
         const {
             name,
-            brand,
             description,
             categoryId,
             hsnCode,
             gstRate,
-            flavor,
-            litters,
-            kg,
             mrp,
+            unit,
+            unitValue,
             costPrice,
             sellingPrice,
             barcode,
-            priceLevel
+            priceLevel,
+            productType,
+            parentProductId,
+            lowStockQty
         } = req.body;
 
         if (!name || !categoryId) {
@@ -36,6 +52,8 @@ exports.productcreate = async (req, res) => {
         }
 
         const hierarchy = attachHierarchy(req.user);
+
+        const itemCode = await generateItemCode(hierarchy.superAdminId);
 
         const cat = await category.findOne({
             _id: categoryId,
@@ -49,109 +67,109 @@ exports.productcreate = async (req, res) => {
             });
         }
 
-        if (!hsnCode) {
-            return res.status(400).json({
-                success: false,
-                message: "HSN code is required"
-            });
-        }
-
         const processedGstRate = Number(gstRate || 0);
 
-        if (isNaN(processedGstRate) || processedGstRate < 0) {
+        const allowedGstRates = [0, 5, 12, 18, 28];
+
+        const allowedUnits = ["pcs", "kg", "g"];
+
+        let finalUnit = unit
+            ? String(unit).trim().toLowerCase()
+            : "pcs";
+
+        if (finalUnit === "gram" || finalUnit === "grams") {
+            finalUnit = "g";
+        }
+
+        const finalUnitValue =
+            unitValue !== undefined && unitValue !== null && unitValue !== ""
+                ? Number(unitValue)
+                : undefined;
+
+        if (!allowedUnits.includes(finalUnit)) {
             return res.status(400).json({
                 success: false,
-                message: "Valid GST rate is required"
+                message: "Unit must be pcs, kg or g"
             });
         }
 
-        const processedFlavors = Array.isArray(flavor)
-            ? flavor.map(x => String(x).trim()).filter(Boolean)
-            : [];
-
-        const processedLitters = Array.isArray(litters)
-            ? litters.map(x => String(x).trim()).filter(Boolean)
-            : [];
-
-        const processedKg = Array.isArray(kg)
-            ? kg.map(x => String(x).trim()).filter(Boolean)
-            : [];
-
-        const processedMrp = Number(mrp);
-
-        if (isNaN(processedMrp) || processedMrp <= 0) {
+        if (
+            finalUnitValue !== undefined &&
+            (isNaN(finalUnitValue) || finalUnitValue <= 0)
+        ) {
             return res.status(400).json({
                 success: false,
-                message: "Valid MRP is required"
+                message: "Valid unitValue is required"
             });
         }
 
-        const processedCostPrice = Number(costPrice);
-        const processedSellingPrice = Number(sellingPrice);
-
-        if (isNaN(processedCostPrice) || processedCostPrice < 0) {
+        if (
+            isNaN(processedGstRate) ||
+            !allowedGstRates.includes(processedGstRate)
+        ) {
             return res.status(400).json({
                 success: false,
-                message: "Valid cost price is required"
+                message: "GST rate must be 0, 5, 12, 18 or 28"
             });
         }
 
-        if (isNaN(processedSellingPrice) || processedSellingPrice < 0) {
+        const processedMrp = Number(mrp || 0);
+
+        const allowedProductTypes = ["normal", "bulk", "repack"];
+
+        const finalProductType = productType
+            ? String(productType).trim().toLowerCase()
+            : "normal";
+
+        if (!allowedProductTypes.includes(finalProductType)) {
             return res.status(400).json({
                 success: false,
-                message: "Valid selling price is required"
+                message: "Product type must be normal, bulk or repack"
+            });
+        }
+        let finalParentProductId = null;
+
+        if (finalProductType === "repack") {
+            if (!parentProductId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Parent bulk product required for repack product"
+                });
+            }
+
+            const parentProduct = await Product.findOne({
+                _id: parentProductId,
+                productType: "bulk",
+                superAdminId: hierarchy.superAdminId
+            });
+
+            if (!parentProduct) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Parent bulk product not found"
+                });
+            }
+
+            finalParentProductId = parentProductId;
+        }
+
+
+        const processedCostPrice = Number(costPrice || 0);
+        const processedSellingPrice = Number(sellingPrice || 0);
+
+        const processedLowStockQty = Number(lowStockQty || 10);
+
+        if (isNaN(processedLowStockQty) || processedLowStockQty < 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Valid low stock qty is required"
             });
         }
 
-        if (processedCostPrice > processedMrp) {
-            return res.status(400).json({
-                success: false,
-                message: "Cost price cannot be greater than MRP"
-            });
-        }
-
-        if (processedSellingPrice > processedMrp) {
-            return res.status(400).json({
-                success: false,
-                message: "Selling price cannot be greater than MRP"
-            });
-        }
-
-        const product = await Product.create({
-            name: String(name).trim(),
-            brand: brand ? String(brand).trim() : "",
-
-            description: description
-                ? String(description).trim()
-                : "",
-
-            stock: 0,
-            reservedStock: 0,
-
-
-            flavor: processedFlavors,
-            litters: processedLitters,
-            kg: processedKg,
-            mrp: processedMrp,
-
-            costPrice: processedCostPrice,
-            sellingPrice: processedSellingPrice,
-
-            categoryId,
-            categoryName: cat.name || "",
-
-
-            hsnCode: String(hsnCode).trim(),
-            gstRate: processedGstRate,
-
-            ...hierarchy,
-            createdBy: req.user.userId
-        });
-
-        let createdBarcode = null;
+        let barcodeCode = "";
 
         if (barcode) {
-            const barcodeCode = String(barcode).trim();
+            barcodeCode = String(barcode).trim();
 
             const existingBarcode = await Barcode.findOne({
                 code: barcodeCode,
@@ -164,6 +182,51 @@ exports.productcreate = async (req, res) => {
                     message: "Barcode already exists"
                 });
             }
+        }
+
+
+        const product = await Product.create({
+            name: String(name).trim(),
+            itemCode,
+
+
+            description: description
+                ? String(description).trim()
+                : "",
+
+            stock: 0,
+            lowStockQty: processedLowStockQty,
+            reservedStock: 0,
+
+            mrp: processedMrp,
+
+            unit: finalUnit,
+            ...(finalUnitValue !== undefined && { unitValue: finalUnitValue }),
+
+            costPrice: processedCostPrice,
+            sellingPrice: processedSellingPrice,
+
+            categoryId,
+            categoryName: cat.name || "",
+
+            hsnCode: hsnCode ? String(hsnCode).trim() : "",
+            gstRate: processedGstRate,
+
+            productType: finalProductType,
+            parentProductId: finalParentProductId,
+
+            ...hierarchy,
+            createdBy: req.user.userId
+        });
+
+
+
+        let createdBarcode = null;
+
+        if (barcode) {
+            const barcodeCode = String(barcode).trim();
+
+
 
             createdBarcode = await Barcode.create({
                 productId: product._id,
@@ -173,12 +236,13 @@ exports.productcreate = async (req, res) => {
                 availableQty: 0,
 
                 mrp: processedMrp,
+
+                unit: finalUnit,
+                ...(finalUnitValue !== undefined && { unitValue: finalUnitValue }),
+
                 costPrice: processedCostPrice,
                 sellingPrice: processedSellingPrice,
                 gstRate: processedGstRate,
-
-                flavor: processedFlavors[0] || "",
-                litters: processedLitters[0] || "",
 
                 isSold: false,
 
@@ -211,7 +275,7 @@ exports.productcreate = async (req, res) => {
                 },
                 {
                     upsert: true,
-                    new: true,
+                    returnDocument: "after",
                     runValidators: true
                 }
             );
@@ -245,16 +309,346 @@ exports.productcreate = async (req, res) => {
 };
 
 
+exports.bulkProductCreate = async (req, res) => {
+    try {
+        const { products } = req.body;
+
+        if (!Array.isArray(products) || products.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Products array is required"
+            });
+        }
+
+        const hierarchy = attachHierarchy(req.user);
+
+        const allowedGstRates = [0, 5, 12, 18, 28];
+        const allowedUnits = ["pcs", "kg", "g"];
+
+        const createdProducts = [];
+        const errors = [];
+        const requestBarcodes = new Set();
+
+        for (let i = 0; i < products.length; i++) {
+            try {
+                const item = products[i];
+
+                const name = item.name ? String(item.name).trim() : "";
+
+                const brand = item.brand ? String(item.brand).trim() : "";
+                const description = item.description ? String(item.description).trim() : "";
+                const categoryId = item.categoryId;
+
+                const hsnCode = item.hsnCode ? String(item.hsnCode).trim() : "";
+                const barcodeCode = item.barcode ? String(item.barcode).trim() : "";
+
+                if (!name || !categoryId) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Name and category required"
+                    });
+                    continue;
+                }
+
+                const cat = await category.findOne({
+                    _id: categoryId,
+                    superAdminId: hierarchy.superAdminId
+                });
+
+                if (!cat) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Category not found"
+                    });
+                    continue;
+                }
+
+                const processedGstRate = Number(item.gstRate || 0);
+
+                if (
+                    isNaN(processedGstRate) ||
+                    !allowedGstRates.includes(processedGstRate)
+                ) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "GST rate must be 0, 5, 12, 18 or 28"
+                    });
+                    continue;
+                }
+
+                let finalUnit = item.unit
+                    ? String(item.unit).trim().toLowerCase()
+                    : "pcs";
+
+                if (finalUnit === "gram" || finalUnit === "grams") {
+                    finalUnit = "g";
+                }
+
+                if (!allowedUnits.includes(finalUnit)) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Unit must be pcs, kg or g"
+                    });
+                    continue;
+                }
+
+                const finalUnitValue =
+                    item.unitValue !== undefined &&
+                        item.unitValue !== null &&
+                        item.unitValue !== ""
+                        ? Number(item.unitValue)
+                        : undefined;
+
+                if (
+                    finalUnitValue !== undefined &&
+                    (isNaN(finalUnitValue) || finalUnitValue <= 0)
+                ) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Valid unitValue is required"
+                    });
+                    continue;
+                }
+
+                const processedMrp = Number(item.mrp || 0);
+
+                const allowedProductTypes = ["normal", "bulk", "repack"];
+
+                const finalProductType = item.productType
+                    ? String(item.productType).trim().toLowerCase()
+                    : "normal";
+
+                if (!allowedProductTypes.includes(finalProductType)) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Product type must be normal, bulk or repack"
+                    });
+                    continue;
+                }
+
+                let finalParentProductId = null;
+
+                if (finalProductType === "repack") {
+                    if (!item.parentProductId) {
+                        errors.push({
+                            row: i + 1,
+                            name,
+                            barcode: barcodeCode,
+                            message: "Parent bulk product required for repack product"
+                        });
+                        continue;
+                    }
+
+                    const parentProduct = await Product.findOne({
+                        _id: item.parentProductId,
+                        productType: "bulk",
+                        superAdminId: hierarchy.superAdminId
+                    });
+
+                    if (!parentProduct) {
+                        errors.push({
+                            row: i + 1,
+                            name,
+                            barcode: barcodeCode,
+                            message: "Parent bulk product not found"
+                        });
+                        continue;
+                    }
+
+                    finalParentProductId = item.parentProductId;
+                }
+
+
+                const processedCostPrice = Number(item.costPrice || 0);
+                const processedSellingPrice = Number(item.sellingPrice || 0);
+                const processedLowStockQty = Number(item.lowStockQty || 10);
+
+                if (isNaN(processedLowStockQty) || processedLowStockQty < 0) {
+                    errors.push({
+                        row: i + 1,
+                        name,
+                        barcode: barcodeCode,
+                        message: "Valid low stock qty is required"
+                    });
+                    continue;
+                }
+
+                if (barcodeCode) {
+                    if (requestBarcodes.has(barcodeCode)) {
+                        errors.push({
+                            row: i + 1,
+                            name,
+                            barcode: barcodeCode,
+                            message: "Duplicate barcode in request"
+                        });
+                        continue;
+                    }
+
+                    requestBarcodes.add(barcodeCode);
+
+                    const existingBarcode = await Barcode.findOne({
+                        code: barcodeCode,
+                        superAdminId: hierarchy.superAdminId
+                    });
+
+                    if (existingBarcode) {
+                        errors.push({
+                            row: i + 1,
+                            name,
+                            barcode: barcodeCode,
+                            message: "Barcode already exists"
+                        });
+                        continue;
+                    }
+                }
+
+                const itemCode = await generateItemCode(hierarchy.superAdminId);
+
+                const product = await Product.create({
+
+                    itemCode,
+                    name,
+                    brand,
+                    description,
+
+                    productType: finalProductType,
+                    parentProductId: finalParentProductId,
+
+                    stock: 0,
+                    lowStockQty: processedLowStockQty,
+                    reservedStock: 0,
+
+                    mrp: processedMrp,
+
+                    unit: finalUnit,
+                    ...(finalUnitValue !== undefined && {
+                        unitValue: finalUnitValue
+                    }),
+
+                    costPrice: processedCostPrice,
+                    sellingPrice: processedSellingPrice,
+
+                    categoryId,
+                    categoryName: cat.name || "",
+
+                    hsnCode,
+                    gstRate: processedGstRate,
+
+                    ...hierarchy,
+                    createdBy: req.user.userId
+                });
+
+                let createdBarcode = null;
+
+                if (barcodeCode) {
+                    createdBarcode = await Barcode.create({
+                        productId: product._id,
+                        code: barcodeCode,
+
+                        qty: 0,
+                        availableQty: 0,
+
+                        mrp: processedMrp,
+
+                        unit: finalUnit,
+                        ...(finalUnitValue !== undefined && {
+                            unitValue: finalUnitValue
+                        }),
+
+                        costPrice: processedCostPrice,
+                        sellingPrice: processedSellingPrice,
+                        gstRate: processedGstRate,
+
+                        isSold: false,
+
+                        ...hierarchy,
+                        createdBy: req.user.userId
+                    });
+                }
+
+                let createdPriceLevel = null;
+
+                if (item.priceLevel) {
+                    createdPriceLevel = await PriceLevel.findOneAndUpdate(
+                        {
+                            productId: product._id,
+                            superAdminId: hierarchy.superAdminId
+                        },
+                        {
+                            productId: product._id,
+                            pricingType: item.priceLevel.pricingType || "slab",
+                            manualPrice: item.priceLevel.manualPrice || 0,
+                            autoPricing: item.priceLevel.autoPricing || {
+                                baseOn: "costPrice",
+                                profitPercent: 0
+                            },
+                            slabs: item.priceLevel.slabs || [],
+
+                            ...hierarchy,
+                            createdBy: req.user.userId,
+                            isActive: true
+                        },
+                        {
+                            upsert: true,
+                            new: true,
+                            runValidators: true
+                        }
+                    );
+                }
+
+                createdProducts.push({
+                    row: i + 1,
+                    product,
+                    barcode: createdBarcode,
+                    priceLevel: createdPriceLevel
+                });
+
+            } catch (err) {
+                errors.push({
+                    row: i + 1,
+                    message: err.code === 11000
+                        ? "Duplicate product or barcode"
+                        : err.message
+                });
+            }
+        }
+
+        return res.status(201).json({
+            success: true,
+            message: "Bulk product add completed",
+            total: products.length,
+            createdCount: createdProducts.length,
+            errorCount: errors.length,
+            data: createdProducts,
+            errors
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: err.message
+        });
+    }
+};
+
 exports.getproductMrps = async (req, res) => {
     try {
         const { productId } = req.params;
 
         const hierarchy = attachHierarchy(req.user);
-
-        const product = await Product.findOne({
-            _id: productId,
-            superAdminId: hierarchy.superAdminId
-        }).select("name brand flavor litters variants");
 
         if (!product) {
             return res.status(404).json({
@@ -268,8 +662,7 @@ exports.getproductMrps = async (req, res) => {
             productId: product._id,
             name: product.name,
             brand: product.brand,
-            flavor: product.flavor,
-            litters: product.litters,
+
             mrps: product.variants.map(v => ({
                 variantId: v._id,
                 mrp: v.mrp
@@ -281,6 +674,44 @@ exports.getproductMrps = async (req, res) => {
             success: false,
             message: "Server error",
             error: err.message
+        });
+    }
+};
+
+exports.getProductsByType = async (req, res) => {
+    try {
+        const hierarchy = attachHierarchy(req.user);
+        const { productType } = req.query;
+
+        const allowedProductTypes = ["normal", "bulk", "repack"];
+
+        if (!productType || !allowedProductTypes.includes(productType)) {
+            return res.status(400).json({
+                success: false,
+                message: "productType must be normal, bulk or repack"
+            });
+        }
+
+        const products = await Product.find({
+            superAdminId: hierarchy.superAdminId,
+            productType
+        })
+            .populate("categoryId", "name")
+            .populate("parentProductId", "name productType unit unitValue stock")
+            .sort({ createdAt: -1 });
+
+        return res.status(200).json({
+            success: true,
+            message: `${productType} products fetched successfully`,
+            count: products.length,
+            data: products
+        });
+
+    } catch (error) {
+        return res.status(500).json({
+            success: false,
+            message: "Server error",
+            error: error.message
         });
     }
 };
@@ -298,11 +729,12 @@ exports.allProducts = async (req, res) => {
 
         products = await Promise.all(
             products.map(async (product) => {
-
-                const barcode = await Barcode.findOne({
+                const barcodes = await Barcode.find({
                     productId: product._id,
                     superAdminId: hierarchy.superAdminId
-                }).lean();
+                })
+                    .sort({ createdAt: -1 })
+                    .lean();
 
                 const priceLevel = await PriceLevel.findOne({
                     productId: product._id,
@@ -310,11 +742,32 @@ exports.allProducts = async (req, res) => {
                     isActive: true
                 }).lean();
 
+                const totalAvailableQty = barcodes.reduce(
+                    (sum, b) => sum + Number(b.availableQty || 0),
+                    0
+                );
+
                 return {
                     ...product,
-                    barcode: barcode?.code || "",
-                    barcodeId: barcode?._id || "",
-                    availableQty: barcode?.availableQty || 0,
+
+                    totalAvailableQty,
+                    barcodeCount: barcodes.length,
+
+                    barcodes: barcodes.map((barcode) => ({
+                        barcodeId: barcode._id,
+                        barcode: barcode.code || "",
+
+                        qty: barcode.qty || 0,
+                        availableQty: barcode.availableQty || 0,
+
+                        unit: barcode.unit || product.unit || "pcs",
+                        unitValue: barcode.unitValue || product.unitValue || 1,
+
+                        mrp: barcode.mrp ?? product.mrp,
+                        costPrice: barcode.costPrice ?? product.costPrice,
+                        sellingPrice: barcode.sellingPrice ?? product.sellingPrice,
+                        gstRate: barcode.gstRate ?? product.gstRate
+                    })),
 
                     priceLevel: priceLevel
                         ? {
@@ -361,6 +814,7 @@ exports.searchProducts = async (req, res) => {
             isActive: { $ne: false },
             $or: [
                 { name: { $regex: search, $options: "i" } },
+                { itemCode: { $regex: search, $options: "i" } },
                 { brand: { $regex: search, $options: "i" } },
                 { hsnCode: { $regex: search, $options: "i" } }
             ]
@@ -372,7 +826,7 @@ exports.searchProducts = async (req, res) => {
         const data = products.map((product) => ({
             productId: product._id,
             productName: product.name || "",
-            brand: product.brand || "",
+            itemCode: product.itemCode || "",
 
             stock: Number(product.stock || 0),
             reservedStock: Number(product.reservedStock || 0),
@@ -383,9 +837,9 @@ exports.searchProducts = async (req, res) => {
             hsnCode: product.hsnCode || product.categoryId?.hsnCode || "",
             gstRate: Number(product.gstRate || product.categoryId?.gstRate || 0),
 
-            flavor: product.flavor || [],
-            litters: product.litters || [],
-            kg: product.kg || [],
+            costPrice: Number(product.costPrice || 0),
+            sellingPrice: Number(product.sellingPrice || 0),
+
             mrps: product.mrps || [],
 
             status:
@@ -467,9 +921,7 @@ exports.searchProductsByCategory = async (req, res) => {
             hsnCode: product.hsnCode || product.categoryId?.hsnCode || "",
             gstRate: Number(product.gstRate || product.categoryId?.gstRate || 0),
 
-            flavor: product.flavor || [],
-            litters: product.litters || [],
-            kg: product.kg || [],
+
             mrps: product.mrps || [],
 
             status:
@@ -501,10 +953,10 @@ exports.searchProductsByCategory = async (req, res) => {
     }
 };
 
+
 exports.ProductsById = async (req, res) => {
     try {
         const { id } = req.params;
-
         const hierarchy = attachHierarchy(req.user);
 
         const product = await Product.findOne({
@@ -522,10 +974,12 @@ exports.ProductsById = async (req, res) => {
             });
         }
 
-        const barcode = await Barcode.findOne({
+        const barcodes = await Barcode.find({
             productId: product._id,
             superAdminId: hierarchy.superAdminId
-        }).lean();
+        })
+            .sort({ createdAt: -1 })
+            .lean();
 
         const priceLevel = await PriceLevel.findOne({
             productId: product._id,
@@ -533,13 +987,37 @@ exports.ProductsById = async (req, res) => {
             isActive: true
         }).lean();
 
+        const totalAvailableQty = barcodes.reduce(
+            (sum, barcode) => sum + Number(barcode.availableQty || 0),
+            0
+        );
+
         return res.status(200).json({
             success: true,
             data: {
                 ...product,
-                barcode: barcode?.code || "",
-                barcodeId: barcode?._id || "",
-                availableQty: barcode?.availableQty || 0,
+
+                totalAvailableQty,
+                barcodeCount: barcodes.length,
+
+                lowStockQty: product.lowStockQty || 10,
+
+                barcodes: barcodes.map((barcode) => ({
+                    barcodeId: barcode._id,
+                    barcode: barcode.code || "",
+
+                    qty: barcode.qty || 0,
+                    availableQty: barcode.availableQty || 0,
+
+                    unit: barcode.unit || product.unit || "pcs",
+                    unitValue: barcode.unitValue || product.unitValue || 1,
+
+                    mrp: barcode.mrp ?? product.mrp,
+                    costPrice: barcode.costPrice ?? product.costPrice,
+                    sellingPrice: barcode.sellingPrice ?? product.sellingPrice,
+                    gstRate: barcode.gstRate ?? product.gstRate
+                })),
+
                 priceLevel: priceLevel || null
             }
         });
@@ -553,24 +1031,23 @@ exports.ProductsById = async (req, res) => {
     }
 };
 
-
 exports.updateProduct = async (req, res) => {
     try {
         const { id } = req.params;
 
         const {
             name,
-            brand,
             description,
             categoryId,
             hsnCode,
             gstRate,
-            flavor,
-            litters,
-            kg,
             mrp,
+            unit,
+            unitValue,
+            lowStockQty,
             costPrice,
-            sellingPrice
+            sellingPrice,
+            barcode
         } = req.body;
 
         if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -613,52 +1090,35 @@ exports.updateProduct = async (req, res) => {
 
         if (name) product.name = String(name).trim();
 
-        if (brand !== undefined) product.brand = String(brand).trim();
-
         if (description !== undefined) {
             product.description = String(description).trim();
         }
 
         if (hsnCode !== undefined) {
-            if (!hsnCode) {
-                return res.status(400).json({
-                    success: false,
-                    message: "HSN code is required"
-                });
-            }
-
-            product.hsnCode = String(hsnCode).trim();
+            product.hsnCode = hsnCode ? String(hsnCode).trim() : "";
         }
 
         if (gstRate !== undefined) {
+            const allowedGstRates = [0, 5, 12, 18, 28];
             const processedGstRate = Number(gstRate);
 
-            if (isNaN(processedGstRate) || processedGstRate < 0) {
+            if (
+                isNaN(processedGstRate) ||
+                !allowedGstRates.includes(processedGstRate)
+            ) {
                 return res.status(400).json({
                     success: false,
-                    message: "Valid GST rate is required"
+                    message: "GST rate must be 0, 5, 12, 18 or 28"
                 });
             }
 
             product.gstRate = processedGstRate;
         }
 
-        if (Array.isArray(flavor)) {
-            product.flavor = flavor.map(x => String(x).trim()).filter(Boolean);
-        }
-
-        if (Array.isArray(litters)) {
-            product.litters = litters.map(x => String(x).trim()).filter(Boolean);
-        }
-
-        if (Array.isArray(kg)) {
-            product.kg = kg.map(x => String(x).trim()).filter(Boolean);
-        }
-
         if (mrp !== undefined) {
             const processedMrp = Number(mrp);
 
-            if (isNaN(processedMrp) || processedMrp <= 0) {
+            if (isNaN(processedMrp) || processedMrp < 0) {
                 return res.status(400).json({
                     success: false,
                     message: "Valid MRP is required"
@@ -666,6 +1126,51 @@ exports.updateProduct = async (req, res) => {
             }
 
             product.mrp = processedMrp;
+        }
+
+        const allowedUnits = ["pcs", "kg", "g"];
+
+        if (unit !== undefined) {
+            let finalUnit = String(unit).trim().toLowerCase();
+
+            if (finalUnit === "gram" || finalUnit === "grams") {
+                finalUnit = "g";
+            }
+
+            if (!allowedUnits.includes(finalUnit)) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Unit must be pcs, kg or g"
+                });
+            }
+
+            product.unit = finalUnit;
+        }
+
+        if (unitValue !== undefined) {
+            const processedUnitValue = Number(unitValue);
+
+            if (isNaN(processedUnitValue) || processedUnitValue <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid unitValue is required"
+                });
+            }
+
+            product.unitValue = processedUnitValue;
+        }
+
+        if (lowStockQty !== undefined) {
+            const processedLowStockQty = Number(lowStockQty);
+
+            if (isNaN(processedLowStockQty) || processedLowStockQty < 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid low stock qty is required"
+                });
+            }
+
+            product.lowStockQty = processedLowStockQty;
         }
 
         if (costPrice !== undefined) {
@@ -718,12 +1223,84 @@ exports.updateProduct = async (req, res) => {
 
         product.updatedBy = req.user.userId || req.user.id;
 
+        let createdBarcode = null;
+
+        if (
+            barcode !== undefined &&
+            barcode !== null &&
+            String(barcode).trim() !== ""
+        ) {
+            const barcodeCode = String(barcode).trim();
+
+            const existingBarcode = await Barcode.findOne({
+                code: barcodeCode,
+                superAdminId: hierarchy.superAdminId
+            });
+
+            if (
+                existingBarcode &&
+                String(existingBarcode.productId) !== String(product._id)
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Barcode already exists for another product"
+                });
+            }
+
+            if (!existingBarcode) {
+                createdBarcode = await Barcode.create({
+                    productId: product._id,
+                    code: barcodeCode,
+
+                    qty: 0,
+                    availableQty: 0,
+
+                    mrp: product.mrp || 0,
+                    costPrice: product.costPrice || 0,
+                    sellingPrice: product.sellingPrice || 0,
+                    gstRate: product.gstRate || 0,
+
+                    unit: product.unit || "pcs",
+                    unitValue: product.unitValue || 1,
+
+                    isSold: false,
+
+                    ...hierarchy,
+                    createdBy: req.user.userId
+                });
+            }
+        }
+
         await product.save();
+
+        await Barcode.updateMany(
+            {
+                productId: product._id,
+                superAdminId: hierarchy.superAdminId
+            },
+            {
+                $set: {
+                    mrp: product.mrp,
+                    costPrice: product.costPrice,
+                    sellingPrice: product.sellingPrice,
+                    gstRate: product.gstRate
+                }
+            }
+        );
+
+        const barcodes = await Barcode.find({
+            productId: product._id,
+            superAdminId: hierarchy.superAdminId
+        }).lean();
 
         return res.json({
             success: true,
             message: "Product updated successfully",
-            data: product
+            data: {
+                product,
+                createdBarcode,
+                barcodes
+            }
         });
 
     } catch (err) {
@@ -741,6 +1318,7 @@ exports.updateProduct = async (req, res) => {
         });
     }
 };
+
 
 exports.deleteAllProducts = async (req, res) => {
 

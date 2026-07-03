@@ -26,6 +26,14 @@ const customerSchema = new mongoose.Schema(
             trim: true
         },
 
+        bankDetails: {
+            accountHolderName: { type: String, default: "" },
+            bankName: { type: String, default: "" },
+            accountNumber: { type: String, default: "" },
+            ifscCode: { type: String, default: "" },
+            branchName: { type: String, default: "" }
+        },
+
         email: {
             type: String,
             default: "",
@@ -36,6 +44,31 @@ const customerSchema = new mongoose.Schema(
             type: String,
             default: "",
             trim: true
+        },
+
+        state: {
+            type: String,
+            default: "",
+            trim: true
+        },
+
+        city: {
+            type: String,
+            default: "",
+            trim: true
+        },
+
+        pincode: {
+            type: String,
+            default: "",
+            trim: true
+        },
+
+        panNumber: {
+            type: String,
+            default: "",
+            trim: true,
+            uppercase: true
         },
 
         totalPurchases: {

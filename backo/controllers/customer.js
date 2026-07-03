@@ -24,7 +24,7 @@ const getNextCustomerId = async () => {
 
 exports.createCustomer = async (req, res) => {
     try {
-        const { name, phone, email, address, gstNumber } = req.body;
+        const { name, phone, email, address, state, city, pincode, gstNumber, panNumber, bankDetails } = req.body;
         const { userId, role, superAdminId, adminId } = req.user;
 
         if (!name || !phone) {
@@ -77,10 +77,25 @@ exports.createCustomer = async (req, res) => {
             phone: cleanPhone,
             email,
             address,
+            state: state || "",
+            city: city || "",
+            pincode: pincode || "",
 
             gstNumber: gstNumber
                 ? gstNumber.trim().toUpperCase()
                 : "",
+
+            panNumber: panNumber
+                ? panNumber.trim().toUpperCase()
+                : "",
+
+            bankDetails: {
+                accountHolderName: bankDetails?.accountHolderName || "",
+                bankName: bankDetails?.bankName || "",
+                accountNumber: bankDetails?.accountNumber || "",
+                ifscCode: bankDetails?.ifscCode || "",
+                branchName: bankDetails?.branchName || ""
+            },
 
             createdBy: userId,
             roleCreatedBy: role,
@@ -102,8 +117,6 @@ exports.createCustomer = async (req, res) => {
         });
     }
 }
-
-
 
 
 exports.getCustomerBalanceTotals = async (req, res) => {
@@ -390,7 +403,7 @@ exports.getCustomerById = async (req, res) => {
 exports.updateCustomer = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, phone, email, address } = req.body;
+        const { name, phone, email, address, state, city, pincode, gstNumber, panNumber, bankDetails } = req.body;
 
         const hierarchy = attachHierarchy(req.user);
 
@@ -417,6 +430,32 @@ exports.updateCustomer = async (req, res) => {
         if (phone) customer.phone = phone.trim();
         if (email) customer.email = email.toLowerCase();
         if (address !== undefined) customer.address = address;
+        if (state !== undefined) customer.state = state;
+        if (city !== undefined) customer.city = city;
+        if (pincode !== undefined) customer.pincode = pincode;
+
+        if (gstNumber !== undefined) {
+            customer.gstNumber = gstNumber
+                ? gstNumber.trim().toUpperCase()
+                : "";
+        }
+
+        if (panNumber !== undefined) {
+            customer.panNumber = panNumber
+                ? panNumber.trim().toUpperCase()
+                : "";
+        }
+
+        if (bankDetails !== undefined) {
+            customer.bankDetails = {
+                accountHolderName: bankDetails?.accountHolderName || "",
+                bankName: bankDetails?.bankName || "",
+                accountNumber: bankDetails?.accountNumber || "",
+                ifscCode: bankDetails?.ifscCode || "",
+                branchName: bankDetails?.branchName || ""
+            };
+        }
+
 
         customer.lastUpdatedBy = req.user.userId;
 

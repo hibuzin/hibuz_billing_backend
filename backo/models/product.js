@@ -3,13 +3,25 @@ const mongoose = require("mongoose");
 
 const productSchema = new mongoose.Schema({
 
-    name: { type: String, required: true },
-
-    brand: {
+    itemCode: {
         type: String,
-        default: "",
+        required: true,
         trim: true
     },
+
+    productType: {
+        type: String,
+        enum: ["normal", "bulk", "repack"],
+        default: "normal"
+    },
+
+    parentProductId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+        default: null
+    },
+
+    name: { type: String, required: true },
 
     description: {
         type: String,
@@ -22,30 +34,28 @@ const productSchema = new mongoose.Schema({
         default: 0
     },
 
+    lowStockQty: {
+        type: Number,
+        default: 10
+    },
+
     reservedStock: {
         type: Number,
         default: 0
     },
 
-
-    flavor: [{
-        type: String,
-        trim: true
-    }],
-
-    litters: [{
-        type: String,
-        trim: true
-    }],
-
-    kg: [
-        {
-            type: String
-        }
-    ],
-
     mrp: {
         type: Number
+    },
+
+    unit: {
+        type: String,
+        enum: ["pcs", "kg", "g"]
+
+    },
+    unitValue: {
+        type: Number
+
     },
 
     costPrice: {
@@ -147,6 +157,11 @@ const productSchema = new mongoose.Schema({
         required: true
     }
 }, { timestamps: true });
+
+productSchema.index(
+    { superAdminId: 1, itemCode: 1 },
+    { unique: true }
+);
 
 module.exports =
     mongoose.models.Product ||

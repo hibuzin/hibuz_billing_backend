@@ -82,6 +82,7 @@ exports.addCashOut = async (req, res) => {
     try {
         const hierarchy = attachHierarchy(req.user);
         const amount = Number(req.body.amount);
+        const note = String(req.body.note || "").trim();
 
         if (isNaN(amount) || amount <= 0) {
             return res.status(400).json({
@@ -107,6 +108,13 @@ exports.addCashOut = async (req, res) => {
             cashRegister.openingAmount +
             cashRegister.cashSales -
             cashRegister.cashOut;
+
+        cashRegister.cashOutHistory.push({
+            amount,
+            note,
+            date: new Date(),
+            createdBy: req.user.userId
+        });
 
         await cashRegister.save();
 
@@ -163,10 +171,26 @@ exports.closeCashRegister = async (req, res) => {
 
         await cashRegister.save();
 
+        const totalSalesAmount =
+            Number(cashRegister.cashSales || 0) +
+            Number(cashRegister.upiSales || 0) +
+            Number(cashRegister.cardSales || 0);
+
         res.json({
             success: true,
             message: "Cash register closed successfully",
-            data: cashRegister
+            data: {
+                ...cashRegister.toObject(),
+
+                totalSalesAmount: Number(totalSalesAmount.toFixed(2)),
+
+                salesSummary: {
+                    cashSales: Number(cashRegister.cashSales || 0),
+                    upiSales: Number(cashRegister.upiSales || 0),
+                    cardSales: Number(cashRegister.cardSales || 0),
+                    totalSalesAmount: Number(totalSalesAmount.toFixed(2))
+                }
+            }
         });
 
     } catch (error) {

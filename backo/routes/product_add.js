@@ -13,7 +13,9 @@ const generateBarcode = () => {
 
 const {
     productcreate,
+    bulkProductCreate,
     getproductMrps,
+    getProductsByType,
     allProducts,
     searchProducts,
     searchProductsByCategory,
@@ -32,6 +34,7 @@ router.post(
 
 );
 
+router.post("/bulk-add", verifyToken, authorize("super_admin", "admin", "cashier"), bulkProductCreate);
 
 router.get(
     "/product-mrps/:productId",
@@ -39,8 +42,13 @@ router.get(
     authorize("super_admin", "admin", "cashier"),
     getproductMrps,
 );
-    
-    
+
+router.get(
+    "/product-type",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    getProductsByType,
+);
 
 
 router.get(

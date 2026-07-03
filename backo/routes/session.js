@@ -6,6 +6,9 @@ const authorize = require("../middleware/role");
 
 const {
     startSession,
+    handoverSession,
+    settleSession,
+    getCurrentSession,
     endSession,
     todaySessions,
     sessionReport
@@ -16,6 +19,27 @@ router.post(
     verifyToken,
     authorize("super_admin", "admin", "cashier"),
     startSession
+);
+
+router.post(
+    "/handover",
+    verifyToken,
+    authorize("cashier", "admin", "super_admin"),
+    handoverSession
+);
+
+router.get(
+    "/current",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    getCurrentSession
+);
+
+router.post(
+    "/settle",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    settleSession
 );
 
 router.post(

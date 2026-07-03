@@ -14,9 +14,18 @@ const billSchema = new mongoose.Schema({
             barcode: String,
 
             name: String,
-            brand: String,
-            flavor: String,
-            litters: String,
+            unit: {
+                type: String,
+                enum: ["pcs", "kg", "g"],
+                default: "pcs"
+            },
+            unitValue: {
+                type: Number,
+                default: 1
+            },
+            unitText: String,
+
+            totalkg: String,
 
             mrp: Number,
 
@@ -96,10 +105,21 @@ const billSchema = new mongoose.Schema({
         enum: ["cash", "upi", "card", "split", "due"],
         default: "cash"
     },
+
     paymentStatus: {
         type: String,
         enum: ["paid", "partial", "due"],
         default: "paid"
+    },
+
+    paidAmount: {
+        type: Number,
+        default: 0
+    },
+
+    pendingAmount: {
+        type: Number,
+        default: 0
     },
 
     role: {
@@ -118,6 +138,13 @@ const billSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
         default: null,
+        index: true
+    },
+
+    cashier: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
         index: true
     },
 
