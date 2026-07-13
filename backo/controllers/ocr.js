@@ -13,7 +13,10 @@ exports.scanPurchaseBill = async (req, res) => {
     const imagePath = req.file.path;
     const pythonFile = path.join(__dirname, "../paddle_ocr.py");
 
-    const python = spawn("python", [pythonFile, imagePath]);
+    const pythonCommand =
+      process.platform === "win32" ? "python" : "python3";
+
+    const python = spawn(pythonCommand, [pythonFile, imagePath]);
 
     let result = "";
     let error = "";
@@ -26,10 +29,18 @@ exports.scanPurchaseBill = async (req, res) => {
       error += data.toString();
     });
 
-    python.on("close", () => {
+    python.on("error", (err) => {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to start Python process",
+        error: err.message
+      });
+    });
 
+    python.on("close", () => {
       console.log("PYTHON RESULT:", result);
       console.log("PYTHON ERROR:", error);
+
       if (error && !result) {
         return res.status(500).json({
           success: false,
@@ -38,32 +49,34 @@ exports.scanPurchaseBill = async (req, res) => {
         });
       }
 
-
-     
-
+      try {
         const parsed = JSON.parse(result);
 
         return res.status(200).json({
-          success: true,
+          success: parsed.success,
           rawText: parsed.text || "",
           fullResult: parsed
         });
-      });
+      } catch (e) {
+        return res.status(500).json({
+          success: false,
+          message: "Invalid response from OCR",
+          result,
+          error: e.message
+        });
+      }
+    });
 
-    } catch (error) {
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Server Error",
+      error: error.message
+    });
+  }
+};
 
-
-
-      return res.status(200).json({
-        success: true,
-        rawText: parsed.text || "",
-        fullResult: parsed
-      });
-    }
-  };
-
-
-  const parseAmount = (v) => Number(String(v).replace(/[$,]/g, ""));
+const parseAmount = (v) => Number(String(v).replace(/[$,]/g, ""));
 
 exports.scanAndParsePurchaseBill = async (req, res) => {
   try {
