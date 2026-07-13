@@ -37,15 +37,18 @@ exports.scanPurchaseBill = async (req, res) => {
       });
     });
 
-    python.on("close", () => {
+    python.on("close", (code) => {
+      console.log("Exit Code:", code);
       console.log("PYTHON RESULT:", result);
       console.log("PYTHON ERROR:", error);
 
-      if (error && !result) {
+      if (code !== 0) {
         return res.status(500).json({
           success: false,
-          message: "OCR failed",
-          error
+          message: "Python process failed",
+          exitCode: code,
+          error,
+          result
         });
       }
 
@@ -56,21 +59,23 @@ exports.scanPurchaseBill = async (req, res) => {
           return res.status(500).json({
             success: false,
             message: "No JSON returned from OCR",
-            result
+            result,
+            error
           });
         }
 
         const parsed = JSON.parse(result.substring(jsonStart));
 
-        return res.status(200).json({
+        return res.json({
           success: parsed.success,
           rawText: parsed.text || "",
           fullResult: parsed
         });
+
       } catch (e) {
         return res.status(500).json({
           success: false,
-          message: "Invalid response from OCR",
+          message: "Invalid JSON",
           result,
           error: e.message
         });

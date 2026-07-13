@@ -4,18 +4,26 @@ import os
 import io
 import contextlib
 
+# Hide PaddleOCR logs
 with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
     from paddleocr import PaddleOCR
 
-image_path = sys.argv[1]
-
 try:
+    if len(sys.argv) < 2:
+        print(json.dumps({
+            "success": False,
+            "error": "Image path not provided"
+        }))
+        sys.exit(1)
+
+    image_path = sys.argv[1]
+
     if not os.path.exists(image_path):
         print(json.dumps({
             "success": False,
             "error": "Image file not found"
         }))
-        sys.exit()
+        sys.exit(1)
 
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
         ocr = PaddleOCR(
