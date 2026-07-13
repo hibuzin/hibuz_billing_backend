@@ -1,9 +1,13 @@
-from paddleocr import PaddleOCR
 import sys
 import json
 import os
+import io
+import contextlib
 
-ocr = PaddleOCR(use_angle_cls=True, lang="en", show_log=False)
+# Hide all stdout logs while importing/loading PaddleOCR
+with contextlib.redirect_stdout(io.StringIO()):
+    from paddleocr import PaddleOCR
+    ocr = PaddleOCR(use_angle_cls=True, lang="en", show_log=False)
 
 image_path = sys.argv[1]
 
@@ -11,12 +15,13 @@ try:
     if not os.path.exists(image_path):
         print(json.dumps({
             "success": False,
-            "error": "Image file not found",
-            "path": image_path
+            "error": "Image file not found"
         }))
         sys.exit()
 
-    result = ocr.ocr(image_path, cls=True)
+    # Hide PaddleOCR logs during OCR
+    with contextlib.redirect_stdout(io.StringIO()):
+        result = ocr.ocr(image_path, cls=True)
 
     texts = []
 

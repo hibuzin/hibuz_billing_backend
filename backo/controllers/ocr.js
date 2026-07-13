@@ -50,7 +50,17 @@ exports.scanPurchaseBill = async (req, res) => {
       }
 
       try {
-        const parsed = JSON.parse(result);
+        const jsonStart = result.indexOf("{");
+
+        if (jsonStart === -1) {
+          return res.status(500).json({
+            success: false,
+            message: "No JSON returned from OCR",
+            result
+          });
+        }
+
+        const parsed = JSON.parse(result.substring(jsonStart));
 
         return res.status(200).json({
           success: parsed.success,
