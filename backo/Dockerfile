@@ -1,6 +1,6 @@
 FROM node:20-bullseye
 
-# Install Python 3.11 and pip
+# Install Python
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
@@ -18,7 +18,15 @@ COPY package*.json ./
 RUN npm install
 
 COPY requirements.txt ./
-RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip
+
+# Install Python packages
+RUN python3 -m pip install --no-cache-dir -r requirements.txt
+
+# Remove any corrupted PaddleOCR model cache
+RUN rm -rf /root/.paddleocr
 
 COPY . .
 
