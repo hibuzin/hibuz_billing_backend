@@ -29,6 +29,8 @@ exports.scanPurchaseBill = async (req, res) => {
       error += data.toString();
     });
 
+    console.log("Python STDERR:", data.toString());
+
     python.on("error", (err) => {
       return res.status(500).json({
         success: false,

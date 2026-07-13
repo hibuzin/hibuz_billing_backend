@@ -21,6 +21,12 @@ RUN npm install
 
 # Install Python packages
 COPY requirements.txt ./
+
+ENV HOME=/root
+ENV PADDLEOCR_HOME=/root/.paddleocr
+
+RUN mkdir -p /root/.paddleocr
+
 RUN python3 -m pip install --upgrade pip
 RUN python3 -m pip install --no-cache-dir -r requirements.txt
 

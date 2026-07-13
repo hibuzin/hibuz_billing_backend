@@ -1,12 +1,15 @@
 import sys
 import json
 import os
-import io
-import contextlib
+import cv2
+from paddleocr import PaddleOCR
 
-# Hide PaddleOCR logs
-with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-    from paddleocr import PaddleOCR
+# Load OCR model only once
+ocr = PaddleOCR(
+    use_angle_cls=True,
+    lang="en",
+    show_log=False
+)
 
 try:
     if len(sys.argv) < 2:
@@ -21,18 +24,28 @@ try:
     if not os.path.exists(image_path):
         print(json.dumps({
             "success": False,
-            "error": "Image file not found"
+            "error": "Image not found"
         }))
         sys.exit(1)
 
-    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-        ocr = PaddleOCR(
-            use_angle_cls=True,
-            lang="en",
-            show_log=False
-        )
+    # Read image
+    img = cv2.imread(image_path)
 
-        result = ocr.ocr(image_path, cls=True)
+    if img is None:
+        print(json.dumps({
+            "success": False,
+            "error": "Cannot read image"
+        }))
+        sys.exit(1)
+
+    # Resize large images (important for Render)
+    h, w = img.shape[:2]
+
+    if w > 1200:
+        ratio = 1200 / w
+        img = cv2.resize(img, (1200, int(h * ratio)))
+
+    result = ocr.ocr(img, cls=True)
 
     texts = []
 
@@ -46,7 +59,10 @@ try:
     }))
 
 except Exception as e:
+    import traceback
+
     print(json.dumps({
         "success": False,
-        "error": str(e)
+        "error": str(e),
+        "traceback": traceback.format_exc()
     }))
