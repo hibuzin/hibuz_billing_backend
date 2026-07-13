@@ -1,5 +1,6 @@
 const User = require("../models/user");
 
+
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -442,7 +443,7 @@ exports.resetPassword = async (req, res) => {
 
 exports.logout = async (req, res) => {
     try {
-         const token = req.token;
+        const token = req.token;
 
         blacklistToken(token);
 

@@ -56,7 +56,7 @@ const sessionRoutes = require("./routes/session");
 const expenseRoutes = require("./routes/expense");
 const cashRegisterRoutes = require("./routes/cashregister");
 const ocrRoute = require("./routes/ocr");
-//const importRoutes = require("./routes/import");
+const subscriptionPlanRoutes = require("./routes/subscription");
 
 
 
@@ -102,7 +102,7 @@ app.use("/api/session", sessionRoutes);
 app.use("/api/expense", expenseRoutes);
 app.use("/api/cash-register", cashRegisterRoutes);
 app.use("/api/ocr", ocrRoute);
-//app.use("/api/import", importRoutes);
+app.use("/api/subscription", subscriptionPlanRoutes);
 
 
 app.get("/", (req, res) => {
