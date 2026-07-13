@@ -1,6 +1,5 @@
 FROM node:20-bullseye
 
-# Install Python
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
@@ -20,16 +19,16 @@ RUN npm install
 
 COPY requirements.txt ./
 
-# Upgrade pip
 RUN python3 -m pip install --upgrade pip
-
-# Install Python packages
 RUN python3 -m pip install --no-cache-dir -r requirements.txt
 
-# Remove any corrupted PaddleOCR model cache
+COPY . .
+
+# Remove any old/corrupted models
 RUN rm -rf /root/.paddleocr
 
-COPY . .
+# Download PaddleOCR models while building the Docker image
+RUN python3 -c "from paddleocr import PaddleOCR; PaddleOCR(use_angle_cls=True, lang='en', show_log=False)"
 
 EXPOSE 10000
 
