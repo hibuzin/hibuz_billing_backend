@@ -21,9 +21,9 @@ exports.scanPurchaseBill = async (req, res) => {
 
     console.log("Python command:", pythonCommand);
 
-    const python = spawn("python3", [
-      "-c",
-      "import sys; print(sys.executable); import paddleocr; print('OK')"
+    const python = spawn(pythonCommand, [
+      pythonFile,
+      imagePath
     ]);
 
     let result = "";
