@@ -2,7 +2,17 @@ import sys
 import json
 import os
 import cv2
-from paddleocr import PaddleOCR
+try:
+    from paddleocr import PaddleOCR
+    print("IMPORT SUCCESS")
+except Exception as e:
+    import traceback
+    print(traceback.format_exc())
+    sys.exit(1)
+
+
+print("PYTHON:", sys.executable)
+print("VERSION:", sys.version)
 
 # Load OCR model only once
 ocr = PaddleOCR(

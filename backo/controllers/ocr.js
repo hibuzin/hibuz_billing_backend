@@ -3,7 +3,7 @@ const path = require("path");
 
 exports.scanPurchaseBill = async (req, res) => {
 
- 
+
 
   try {
     if (!req.file) {
@@ -19,7 +19,12 @@ exports.scanPurchaseBill = async (req, res) => {
     const pythonCommand =
       process.platform === "win32" ? "python" : "python3";
 
-    const python = spawn(pythonCommand, [pythonFile, imagePath]);
+    console.log("Python command:", pythonCommand);
+
+    const python = spawn("python3", [
+      "-c",
+      "import sys; print(sys.executable); import paddleocr; print('OK')"
+    ]);
 
     let result = "";
     let error = "";
