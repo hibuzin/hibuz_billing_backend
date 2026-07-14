@@ -87,15 +87,8 @@ try:
 
     start = time.time()
 
-    print("Sleeping...", file=sys.stderr)
-    sys.stderr.flush()
+    result = ocr.ocr(img, cls=False)
 
-    time.sleep(5)
-
-    print("Awake", file=sys.stderr)
-    sys.stderr.flush()
-
-    result = []
 
     print("After OCR", file=sys.stderr)
     sys.stderr.flush()
