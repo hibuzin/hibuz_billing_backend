@@ -84,17 +84,7 @@ try:
 
     print("Running OCR...", file=sys.stderr)
 
-    # ==========================================
-    # TEMPORARY TEST (NO OCR)
-    # ==========================================
-    print("Sleeping for 5 seconds...", file=sys.stderr)
-    time.sleep(5)
-    print("Finished sleeping.", file=sys.stderr)
-
-    print(json.dumps({
-        "success": True,
-        "text": "OCR TEST SUCCESS"
-    }))
+    print("Running OCR...", file=sys.stderr)
 
     sys.exit(0)
 
