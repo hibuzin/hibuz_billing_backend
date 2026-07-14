@@ -19,7 +19,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
-# Install Python packages
+# Copy Python requirements
 COPY requirements.txt ./
 
 ENV HOME=/root
@@ -27,16 +27,22 @@ ENV PADDLEOCR_HOME=/root/.paddleocr
 
 RUN mkdir -p /root/.paddleocr
 
+# Upgrade pip and install Python packages
 RUN python3 -m pip install --upgrade pip
+
 RUN python3 -m pip install --no-cache-dir -r requirements.txt
+
+# ===== DEBUG =====
+RUN python3 --version
+RUN python3 -m pip --version
+RUN python3 -m pip show paddleocr
+RUN python3 -c "import paddleocr; print('PaddleOCR imported successfully')"
+# =================
 
 # Copy project
 COPY . .
 
-# Remove any corrupted PaddleOCR cache
-RUN rm -rf /root/.paddleocr
-
-# Download PaddleOCR models during build
+# Download PaddleOCR models
 RUN python3 -c "from paddleocr import PaddleOCR; PaddleOCR(use_angle_cls=True, lang='en', show_log=False)"
 
 EXPOSE 10000
