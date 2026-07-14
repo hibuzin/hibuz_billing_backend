@@ -3,6 +3,7 @@ import json
 import os
 import cv2
 import traceback
+import time
 
 # Import PaddleOCR
 try:
@@ -15,19 +16,19 @@ except Exception:
         "success": False,
         "error": "Failed to import paddleocr"
     }))
-
     sys.exit(1)
 
 print("PYTHON:", sys.executable, file=sys.stderr)
 print("VERSION:", sys.version, file=sys.stderr)
 
-# Load OCR model
+# Initialize OCR
 try:
     print("Loading OCR model...", file=sys.stderr)
 
     ocr = PaddleOCR(
         use_angle_cls=True,
         lang="en",
+        use_gpu=False,
         show_log=False
     )
 
@@ -40,10 +41,10 @@ except Exception:
         "success": False,
         "error": "Failed to initialize PaddleOCR"
     }))
-
     sys.exit(1)
 
 try:
+
     if len(sys.argv) < 2:
         print(json.dumps({
             "success": False,
@@ -83,10 +84,13 @@ try:
 
     print("Running OCR...", file=sys.stderr)
 
+    start = time.time()
+
     result = ocr.ocr(img, cls=True)
 
-    print("OCR Finished", file=sys.stderr)
-    print(result, file=sys.stderr)
+    print("OCR Returned", file=sys.stderr)
+    print("OCR Time:", time.time() - start, file=sys.stderr)
+    print("Result Type:", type(result), file=sys.stderr)
 
     texts = []
 
@@ -94,12 +98,12 @@ try:
         for line in result[0]:
             texts.append(line[1][0])
 
-    output = {
+    print("Detected Text Count:", len(texts), file=sys.stderr)
+
+    print(json.dumps({
         "success": True,
         "text": "\n".join(texts)
-    }
-
-    print(json.dumps(output))
+    }))
 
 except Exception:
     print(traceback.format_exc(), file=sys.stderr)
@@ -109,5 +113,4 @@ except Exception:
         "error": "OCR processing failed",
         "traceback": traceback.format_exc()
     }))
-
     sys.exit(1)
