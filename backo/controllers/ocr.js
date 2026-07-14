@@ -32,6 +32,28 @@ exports.scanPurchaseBill = async (req, res) => {
 
     const python = spawn(pythonCommand, [pythonFile, imagePath]);
 
+    const timeout = setTimeout(() => {
+      console.log("OCR PROCESS STILL RUNNING AFTER 60 SECONDS");
+    }, 60000);
+
+
+    python.on("exit", (code, signal) => {
+      console.log("========== PYTHON EXIT ==========");
+      console.log("Exit Code:", code);
+      console.log("Signal:", signal);
+    });
+
+
+
+    python.on("close", (code, signal) => {
+
+      clearTimeout(timeout);
+      
+      console.log("========== PYTHON CLOSE ==========");
+      console.log("Exit Code:", code);
+      console.log("Signal:", signal);
+    });
+
     let result = "";
     let error = "";
 
@@ -45,6 +67,14 @@ exports.scanPurchaseBill = async (req, res) => {
       console.log("===== STDERR CHUNK =====");
       console.log(data.toString());
       error += data.toString();
+    });
+
+    python.stdout.on("end", () => {
+      console.log("STDOUT ENDED");
+    });
+
+    python.stderr.on("end", () => {
+      console.log("STDERR ENDED");
     });
 
     python.on("spawn", () => {
