@@ -2,24 +2,46 @@ import sys
 import json
 import os
 import cv2
+import traceback
+
+# Import PaddleOCR
 try:
     from paddleocr import PaddleOCR
-    print("IMPORT SUCCESS")
-except Exception as e:
-    import traceback
-    print(traceback.format_exc())
+    print("IMPORT SUCCESS", file=sys.stderr)
+except Exception:
+    print(traceback.format_exc(), file=sys.stderr)
+
+    print(json.dumps({
+        "success": False,
+        "error": "Failed to import paddleocr"
+    }))
+
     sys.exit(1)
 
+print("PYTHON:", sys.executable, file=sys.stderr)
+print("VERSION:", sys.version, file=sys.stderr)
 
-print("PYTHON:", sys.executable)
-print("VERSION:", sys.version)
+# Load OCR model
+try:
+    print("Loading OCR model...", file=sys.stderr)
 
-# Load OCR model only once
-ocr = PaddleOCR(
-    use_angle_cls=True,
-    lang="en",
-    show_log=False
-)
+    ocr = PaddleOCR(
+        use_angle_cls=True,
+        lang="en",
+        show_log=False
+    )
+
+    print("OCR model loaded successfully", file=sys.stderr)
+
+except Exception:
+    print(traceback.format_exc(), file=sys.stderr)
+
+    print(json.dumps({
+        "success": False,
+        "error": "Failed to initialize PaddleOCR"
+    }))
+
+    sys.exit(1)
 
 try:
     if len(sys.argv) < 2:
@@ -31,6 +53,9 @@ try:
 
     image_path = sys.argv[1]
 
+    print("Image Path:", image_path, file=sys.stderr)
+    print("Image Exists:", os.path.exists(image_path), file=sys.stderr)
+
     if not os.path.exists(image_path):
         print(json.dumps({
             "success": False,
@@ -38,7 +63,6 @@ try:
         }))
         sys.exit(1)
 
-    # Read image
     img = cv2.imread(image_path)
 
     if img is None:
@@ -48,14 +72,21 @@ try:
         }))
         sys.exit(1)
 
-    # Resize large images (important for Render)
+    print("Image Shape:", img.shape, file=sys.stderr)
+
     h, w = img.shape[:2]
 
     if w > 1200:
         ratio = 1200 / w
         img = cv2.resize(img, (1200, int(h * ratio)))
+        print("Image resized", file=sys.stderr)
+
+    print("Running OCR...", file=sys.stderr)
 
     result = ocr.ocr(img, cls=True)
+
+    print("OCR Finished", file=sys.stderr)
+    print(result, file=sys.stderr)
 
     texts = []
 
@@ -63,16 +94,20 @@ try:
         for line in result[0]:
             texts.append(line[1][0])
 
-    print(json.dumps({
+    output = {
         "success": True,
         "text": "\n".join(texts)
-    }))
+    }
 
-except Exception as e:
-    import traceback
+    print(json.dumps(output))
+
+except Exception:
+    print(traceback.format_exc(), file=sys.stderr)
 
     print(json.dumps({
         "success": False,
-        "error": str(e),
+        "error": "OCR processing failed",
         "traceback": traceback.format_exc()
     }))
+
+    sys.exit(1)

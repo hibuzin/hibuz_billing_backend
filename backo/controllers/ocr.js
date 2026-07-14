@@ -1,70 +1,82 @@
 const { spawn } = require("child_process");
 const path = require("path");
+const fs = require("fs");
 
 exports.scanPurchaseBill = async (req, res) => {
-
-
-
   try {
+    console.log("========== OCR START ==========");
+
     if (!req.file) {
+      console.log("No file received");
       return res.status(400).json({
         success: false,
         message: "Bill image is required"
       });
     }
 
+    console.log("File:", req.file);
+
     const imagePath = req.file.path;
     const pythonFile = path.join(__dirname, "../paddle_ocr.py");
+
+    console.log("Image Path:", imagePath);
+    console.log("Python File:", pythonFile);
+
+    console.log("Image Exists:", fs.existsSync(imagePath));
+    console.log("Python Exists:", fs.existsSync(pythonFile));
 
     const pythonCommand =
       process.platform === "win32" ? "python" : "python3";
 
-    console.log("Python command:", pythonCommand);
+    console.log("Python Command:", pythonCommand);
 
-    const python = spawn("python3", [
-      pythonFile,
-      imagePath
-    ]);
+    const python = spawn(pythonCommand, [pythonFile, imagePath]);
 
     let result = "";
     let error = "";
 
     python.stdout.on("data", (data) => {
+      console.log("===== STDOUT CHUNK =====");
+      console.log(data.toString());
       result += data.toString();
     });
 
     python.stderr.on("data", (data) => {
+      console.log("===== STDERR CHUNK =====");
+      console.log(data.toString());
       error += data.toString();
-      console.log("Python STDERR:", data.toString());
+    });
+
+    python.on("spawn", () => {
+      console.log("Python process started");
     });
 
     python.on("error", (err) => {
+      console.log("PROCESS ERROR:", err);
+
       return res.status(500).json({
         success: false,
-        message: "Failed to start Python process",
+        message: "Failed to start Python",
         error: err.message
       });
     });
 
     python.on("close", (code) => {
+      console.log("========== PYTHON CLOSED ==========");
       console.log("Exit Code:", code);
-      console.log("PYTHON RESULT:", result);
-      console.log("PYTHON ERROR:", error);
-
-      if (code !== 0) {
-        return res.status(500).json({
-          success: false,
-          message: "Python process failed",
-          exitCode: code,
-          error,
-          result
-        });
-      }
+      console.log("Result:");
+      console.log(result);
+      console.log("Error:");
+      console.log(error);
 
       try {
         const jsonStart = result.indexOf("{");
 
+        console.log("JSON Start:", jsonStart);
+
         if (jsonStart === -1) {
+          console.log("No JSON found in output");
+
           return res.status(500).json({
             success: false,
             message: "No JSON returned from OCR",
@@ -73,32 +85,44 @@ exports.scanPurchaseBill = async (req, res) => {
           });
         }
 
-        const parsed = JSON.parse(result.substring(jsonStart));
+        const jsonString = result.substring(jsonStart);
+
+        console.log("JSON STRING:");
+        console.log(jsonString);
+
+        const parsed = JSON.parse(jsonString);
+
+        console.log("PARSED:");
+        console.log(parsed);
 
         return res.json({
-          success: parsed.success,
-          rawText: parsed.text || "",
+          success: true,
+          rawText: parsed.text,
           fullResult: parsed
         });
 
       } catch (e) {
+        console.log("JSON PARSE ERROR");
+        console.log(e);
+
         return res.status(500).json({
           success: false,
-          message: "Invalid JSON",
+          message: "JSON Parse Error",
+          error: e.message,
           result,
-          error: e.message
+          pythonError: error
         });
       }
     });
 
-  } catch (error) {
-    console.error("ERROR MESSAGE:", error.message);
-    console.error("ERROR STACK:", error.stack);
+  } catch (err) {
+    console.log("NODE ERROR");
+    console.log(err);
 
     return res.status(500).json({
       success: false,
       message: "Server Error",
-      error: error.message
+      error: err.message
     });
   }
 };
