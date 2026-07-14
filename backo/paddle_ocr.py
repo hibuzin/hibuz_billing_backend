@@ -1,9 +1,18 @@
+import os
+
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import sys
 import json
 import os
 import cv2
 import traceback
 import time
+import psutil
 
 # Import PaddleOCR
 try:
@@ -25,11 +34,13 @@ try:
     print("Loading OCR model...", file=sys.stderr)
 
     ocr = PaddleOCR(
-        use_angle_cls=False,
-        lang="en",
-        use_gpu=False,
-        show_log=False
-    )
+    use_angle_cls=False,
+    lang="en",
+    use_gpu=False,
+    cpu_threads=1,
+    enable_mkldnn=False,
+    show_log=False
+)
 
     print("OCR model loaded successfully", file=sys.stderr)
 
@@ -85,10 +96,17 @@ try:
     print("Before OCR", file=sys.stderr)
     sys.stderr.flush()
 
+    print(
+        "Available RAM:",
+        round(psutil.virtual_memory().available / 1024 / 1024),
+        "MB",
+        file=sys.stderr
+    )
+    sys.stderr.flush()
+
     start = time.time()
 
     result = ocr.ocr(img, cls=False)
-
 
     print("After OCR", file=sys.stderr)
     sys.stderr.flush()
