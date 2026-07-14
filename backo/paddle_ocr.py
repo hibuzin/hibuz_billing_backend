@@ -11,7 +11,6 @@ try:
     print("IMPORT SUCCESS", file=sys.stderr)
 except Exception:
     print(traceback.format_exc(), file=sys.stderr)
-
     print(json.dumps({
         "success": False,
         "error": "Failed to import paddleocr"
@@ -36,7 +35,6 @@ try:
 
 except Exception:
     print(traceback.format_exc(), file=sys.stderr)
-
     print(json.dumps({
         "success": False,
         "error": "Failed to initialize PaddleOCR"
@@ -84,8 +82,33 @@ try:
 
     print("Running OCR...", file=sys.stderr)
 
-    print("Running OCR...", file=sys.stderr)
+    print("Before OCR", file=sys.stderr)
+    sys.stderr.flush()
 
+    start = time.time()
+
+    result = ocr.ocr(img, cls=False)
+
+    print("After OCR", file=sys.stderr)
+    sys.stderr.flush()
+
+    print("OCR Time:", time.time() - start, file=sys.stderr)
+    print("Result Type:", type(result), file=sys.stderr)
+
+    texts = []
+
+    if result and result[0]:
+        for line in result[0]:
+            texts.append(line[1][0])
+
+    print("Detected Text Count:", len(texts), file=sys.stderr)
+
+    print(json.dumps({
+        "success": True,
+        "text": "\n".join(texts)
+    }))
+
+    sys.stdout.flush()
     sys.exit(0)
 
 except Exception:
@@ -96,4 +119,5 @@ except Exception:
         "error": "OCR processing failed",
         "traceback": traceback.format_exc()
     }))
+
     sys.exit(1)
