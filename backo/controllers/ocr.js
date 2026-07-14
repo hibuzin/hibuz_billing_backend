@@ -2,6 +2,9 @@ const { spawn } = require("child_process");
 const path = require("path");
 
 exports.scanPurchaseBill = async (req, res) => {
+
+ 
+
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -27,9 +30,8 @@ exports.scanPurchaseBill = async (req, res) => {
 
     python.stderr.on("data", (data) => {
       error += data.toString();
+      console.log("Python STDERR:", data.toString());
     });
-
-    console.log("Python STDERR:", data.toString());
 
     python.on("error", (err) => {
       return res.status(500).json({
@@ -85,6 +87,9 @@ exports.scanPurchaseBill = async (req, res) => {
     });
 
   } catch (error) {
+    console.error("ERROR MESSAGE:", error.message);
+    console.error("ERROR STACK:", error.stack);
+
     return res.status(500).json({
       success: false,
       message: "Server Error",
