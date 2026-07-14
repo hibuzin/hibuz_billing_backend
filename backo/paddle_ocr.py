@@ -87,7 +87,15 @@ try:
 
     start = time.time()
 
-    result = ocr.ocr(img, cls=False)
+    print("Sleeping...", file=sys.stderr)
+    sys.stderr.flush()
+
+    time.sleep(5)
+
+    print("Awake", file=sys.stderr)
+    sys.stderr.flush()
+
+    result = []
 
     print("After OCR", file=sys.stderr)
     sys.stderr.flush()
@@ -120,4 +128,5 @@ except Exception:
         "traceback": traceback.format_exc()
     }))
 
+    sys.stdout.flush()
     sys.exit(1)
