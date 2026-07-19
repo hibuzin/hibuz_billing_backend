@@ -28,13 +28,13 @@ ENV PADDLEOCR_HOME=/root/.paddleocr
 RUN mkdir -p /root/.paddleocr
 
 # Upgrade pip and install Python packages
+RUN python3 --version
+RUN python3 -m pip --version
+
 RUN python3 -m pip install --upgrade pip
 
 RUN python3 -m pip install --no-cache-dir -r requirements.txt
 
-# ===== DEBUG =====
-RUN python3 --version
-RUN python3 -m pip --version
 RUN python3 -m pip show paddleocr
 RUN python3 -c "import paddleocr; print('PaddleOCR imported successfully')"
 # =================
