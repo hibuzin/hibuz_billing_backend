@@ -30,6 +30,7 @@ RUN mkdir -p /root/.paddleocr
 # Upgrade pip and install Python packages
 RUN python3 --version
 RUN python3 -m pip --version
+RUN uname -m
 
 RUN python3 -m pip install --upgrade pip
 
