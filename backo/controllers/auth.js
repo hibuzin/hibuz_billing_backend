@@ -94,11 +94,22 @@ exports.registerSuperAdmin = async (req, res) => {
             role: "super_admin"
         });
 
+        const token = jwt.sign(
+            {
+                userId: user._id,
+                role: user.role,
+                superAdminId: user._id,
+                adminId: null
+            },
+            process.env.JWT_SECRET
+        );
+
         return res.status(201).json({
             success: true,
             message: "Shop super admin created successfully",
-            data: {
-                id: user._id,
+            token,
+            user: {
+                userId: user._id,
                 CompanyName: user.CompanyName,
                 CompanyPhone: user.CompanyPhone,
                 CompanyEmail: user.CompanyEmail,
@@ -107,7 +118,8 @@ exports.registerSuperAdmin = async (req, res) => {
                 pincode: user.pincode,
                 city: user.city,
                 gstnumber: user.gstnumber,
-                role: user.role
+                role: user.role,
+                superAdminId: user._id
             }
         });
 

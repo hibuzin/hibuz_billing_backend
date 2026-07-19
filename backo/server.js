@@ -60,6 +60,7 @@ const subscriptionPlanRoutes = require("./routes/subscription");
 
 
 
+
 app.use("/api/auth", authRoutes);
 app.use("/api/super-admin", superAdminControlRoutes);
 app.use("/api/admin", AdminUserRoutes);
@@ -103,6 +104,7 @@ app.use("/api/expense", expenseRoutes);
 app.use("/api/cash-register", cashRegisterRoutes);
 app.use("/api/ocr", ocrRoute);
 app.use("/api/subscription", subscriptionPlanRoutes);
+
 
 
 app.get("/", (req, res) => {
