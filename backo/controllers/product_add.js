@@ -23,6 +23,26 @@ const generateItemCode = async (superAdminId) => {
     return code;
 };
 
+
+const generateBarcode = async (superAdminId) => {
+    let code;
+    let exists = true;
+
+    while (exists) {
+        code = Math.floor(
+            100000000000 + Math.random() * 900000000000
+        ).toString();
+
+        exists = await Barcode.findOne({
+            code,
+            superAdminId
+        });
+    }
+
+    return code;
+};
+
+
 exports.productcreate = async (req, res) => {
 
     try {
@@ -38,6 +58,7 @@ exports.productcreate = async (req, res) => {
             costPrice,
             sellingPrice,
             barcode,
+            barcodeGenerate,
             priceLevel,
             productType,
             parentProductId,
@@ -57,19 +78,19 @@ exports.productcreate = async (req, res) => {
 
         let cat = null;
 
-if (categoryId) {
-    cat = await category.findOne({
-        _id: categoryId,
-        superAdminId: hierarchy.superAdminId
-    });
+        if (categoryId) {
+            cat = await category.findOne({
+                _id: categoryId,
+                superAdminId: hierarchy.superAdminId
+            });
 
-    if (!cat) {
-        return res.status(404).json({
-            success: false,
-            message: "Category not found"
-        });
-    }
-}
+            if (!cat) {
+                return res.status(404).json({
+                    success: false,
+                    message: "Category not found"
+                });
+            }
+        }
 
         const processedGstRate = Number(gstRate || 0);
 
@@ -210,10 +231,10 @@ if (categoryId) {
             costPrice: processedCostPrice,
             sellingPrice: processedSellingPrice,
 
-          
+
 
             categoryId: categoryId || null,
-categoryName: cat?.name || "",
+            categoryName: cat?.name || "",
 
             hsnCode: hsnCode ? String(hsnCode).trim() : "",
             gstRate: processedGstRate,
@@ -227,33 +248,54 @@ categoryName: cat?.name || "",
 
 
 
-        let createdBarcode = null;
-
-        if (barcode) {
-            const barcodeCode = String(barcode).trim();
 
 
+        const totalGenerate = Number(barcodeGenerate || 1);
 
-            createdBarcode = await Barcode.create({
-                productId: product._id,
-                code: barcodeCode,
+        if (isNaN(totalGenerate) || totalGenerate <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "barcodeGenerate must be greater than 0"
+            });
+        }
 
-                qty: 0,
-                availableQty: 0,
 
-                mrp: processedMrp,
+        
+        if (barcode && String(barcode).trim() !== "") {
+            barcodeCode = String(barcode).trim();
+        } else {
+            barcodeCode = await generateBarcode(hierarchy.superAdminId);
+        }
 
-                unit: finalUnit,
-                ...(finalUnitValue !== undefined && { unitValue: finalUnitValue }),
+        // Save ONLY ONE barcode
+        const savedBarcode = await Barcode.create({
+            productId: product._id,
+            code: barcodeCode,
 
-                costPrice: processedCostPrice,
-                sellingPrice: processedSellingPrice,
-                gstRate: processedGstRate,
+            qty: 0,
+            availableQty: 0,
 
-                isSold: false,
+            mrp: processedMrp,
 
-                ...hierarchy,
-                createdBy: req.user.userId
+            unit: finalUnit,
+            ...(finalUnitValue !== undefined && { unitValue: finalUnitValue }),
+
+            costPrice: processedCostPrice,
+            sellingPrice: processedSellingPrice,
+            gstRate: processedGstRate,
+
+            isSold: false,
+
+            ...hierarchy,
+            createdBy: req.user.userId
+        });
+
+        // Response only
+        const createdBarcodes = [];
+
+        for (let i = 0; i < totalGenerate; i++) {
+            createdBarcodes.push({
+                code: savedBarcode.code
             });
         }
 
@@ -292,7 +334,7 @@ categoryName: cat?.name || "",
             message: "Product created successfully",
             data: {
                 product,
-                barcode: createdBarcode,
+                barcodes: createdBarcodes,
                 priceLevel: createdPriceLevel
             }
         });
@@ -1078,22 +1120,22 @@ exports.updateProduct = async (req, res) => {
         }
 
         if (categoryId) {
-           let cat = null;
+            let cat = null;
 
-if (categoryId) {
-    cat = await category.findOne({
-        _id: categoryId,
-        superAdminId: hierarchy.superAdminId
-    });
+            if (categoryId) {
+                cat = await category.findOne({
+                    _id: categoryId,
+                    superAdminId: hierarchy.superAdminId
+                });
 
-    if (!cat) {
-        return res.status(404).json({
-            success: false,
-            message: "Category not found"
-        });
-    }
+                if (!cat) {
+                    return res.status(404).json({
+                        success: false,
+                        message: "Category not found"
+                    });
+                }
 
-}
+            }
 
             product.categoryId = categoryId;
             product.categoryName = cat.name || "";
