@@ -267,7 +267,7 @@ exports.productcreate = async (req, res) => {
             barcodeCode = await generateBarcode(hierarchy.superAdminId);
         }
 
-        // Save ONLY ONE barcode
+ 
         const savedBarcode = await Barcode.create({
             productId: product._id,
             code: barcodeCode,
@@ -888,7 +888,15 @@ exports.searchProducts = async (req, res) => {
             costPrice: Number(product.costPrice || 0),
             sellingPrice: Number(product.sellingPrice || 0),
 
-            mrps: product.mrps || [],
+            mrp:
+                product.mrps?.length > 0
+                    ? Number(product.mrps[0].mrp || 0)
+                    : 0,
+
+            unitValue: Number(product.unitValue || 0),
+            unit: product.unit || "",
+
+            mrp: Number(product.mrp || 0),
 
             status:
                 Number(product.stock || 0) <= 0
@@ -912,6 +920,7 @@ exports.searchProducts = async (req, res) => {
         });
     }
 };
+
 
 
 exports.searchProductsByCategory = async (req, res) => {
