@@ -84,6 +84,23 @@ const userSchema = new mongoose.Schema(
         },
 
 
+        subscription: {
+            status: {
+                type: String,
+                enum: ["inactive", "active", "expired", "cancelled"],
+                default: "inactive"
+            },
+
+            plan: {
+                type: String,
+                default: null
+            },
+
+            startDate: Date,
+
+            endDate: Date
+        },
+
         resetToken: {
             type: String,
             select: false

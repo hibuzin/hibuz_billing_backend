@@ -10,6 +10,7 @@ const mongoose = require("mongoose");
 
 
 
+
 exports.setupStatus = async (req, res) => {
     try {
         const superAdmin = await User.findOne({
@@ -91,7 +92,14 @@ exports.registerSuperAdmin = async (req, res) => {
             pincode: pincode?.trim() || "",
             city: city?.trim() || "",
             gstnumber: gstnumber?.trim().toUpperCase() || "",
-            role: "super_admin"
+            role: "super_admin",
+
+            subscription: {
+                status: "inactive",
+                plan: null,
+                startDate: null,
+                endDate: null
+            }
         });
 
         const token = jwt.sign(
@@ -119,7 +127,8 @@ exports.registerSuperAdmin = async (req, res) => {
                 city: user.city,
                 gstnumber: user.gstnumber,
                 role: user.role,
-                superAdminId: user._id
+                superAdminId: user._id,
+                subscription: user.subscription
             }
         });
 
@@ -152,6 +161,8 @@ exports.login = async (req, res) => {
                 { CompanyPhone: loginValue }
             ]
         }).select("+password");
+
+
 
         if (!user) {
             user = await adminandcashier.findOne({
@@ -216,7 +227,19 @@ exports.login = async (req, res) => {
                     CompanyName: user.CompanyName,
                     CompanyPhone: user.CompanyPhone,
                     CompanyEmail: user.CompanyEmail,
-                    superAdminId
+                    superAdminId,
+
+                    subscription: {
+                        status: user.subscription.status,
+                        plan: user.subscription.plan,
+                        startDate: user.subscription.startDate
+                            ? user.subscription.startDate.toISOString().split("T")[0]
+                            : null,
+                        endDate: user.subscription.endDate
+                            ? user.subscription.endDate.toISOString().split("T")[0]
+                            : null
+                    }
+
                 }
                 : {
                     userId: user._id,
