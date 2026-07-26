@@ -50,6 +50,16 @@ const billSchema = new mongoose.Schema({
                 default: 1
             },
 
+            freeQty: {
+                type: Number,
+                default: 0
+            },
+
+            totalGivenQty: {
+                type: Number,
+                default: 0
+            },
+
             gstRate: Number,
             gstAmount: Number,
             finalPrice: Number
@@ -58,7 +68,6 @@ const billSchema = new mongoose.Schema({
 
     invoiceNo: {
         type: String,
-        unique: true,
         sparse: true
     },
 
@@ -81,6 +90,18 @@ const billSchema = new mongoose.Schema({
         }
     },
 
+    offer: {
+        offerId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Offer"
+        },
+        offerName: String,
+        discountAmount: {
+            type: Number,
+            default: 0
+        }
+    },
+
     customerId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Customer",
@@ -91,18 +112,33 @@ const billSchema = new mongoose.Schema({
         {
             method: {
                 type: String,
-                enum: ["cash", "upi", "card"],
-                required: true
+                enum: ["cash", "upi", "card", "cheque", "sodexo"]
             },
-            amount: {
-                type: Number,
-                required: true
+            amount: Number,
+
+            details: {
+                upiId: String,
+
+                cardType: String,
+                cardLast4: String,
+
+                chequeNo: String,
+                chequeDate: Date,
+                bankName: String,
+                accountHolder: String
             }
         }
     ],
+
+    sodexoSales: {
+        type: Number,
+        default: 0
+    },
+
+
     paymentMethod: {
         type: String,
-        enum: ["cash", "upi", "card", "split", "due"],
+        enum: ["cash", "upi", "card", "cheque", "sodexo", "split", "due"],
         default: "cash"
     },
 
@@ -153,5 +189,7 @@ const billSchema = new mongoose.Schema({
         ref: "User"
     }
 }, { timestamps: true });
+
+billSchema.index({ superAdminId: 1, invoiceNo: 1 }, { unique: true });
 
 module.exports = mongoose.models.Bill || mongoose.model("Bill", billSchema);

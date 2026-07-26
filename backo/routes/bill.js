@@ -10,12 +10,15 @@ const authorize = require("../middleware/role");
 
 const {
     createBill,
+    calculateBill,
     searchProductsForBill,
     searchCustomerBills,
     getBills,
+    getWalkInCustomerBills,
     salescheck,
     cashierWiseSales,
-    getBillById
+    getBillById,
+    editBill
 } = require("../controllers/bill");
 
 
@@ -25,6 +28,15 @@ router.post(
     authorize("super_admin", "admin", "cashier"),
     createBill
 );
+
+
+router.post(
+    "/calculate",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    calculateBill
+);
+
 
 router.get("/search-product",
     verifyToken,
@@ -45,6 +57,12 @@ router.get(
     authorize("super_admin", "admin", "cashier"),
     getBills
 );
+
+
+router.get("/walk-in-bills",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    getWalkInCustomerBills);
 
 
 
@@ -72,5 +90,11 @@ router.get("/:id",
     getBillById
 );
 
+
+router.put("/edit/:billId",
+    verifyToken,
+    authorize("super_admin", "admin", "cashier"),
+    editBill
+);
 
 module.exports = router;

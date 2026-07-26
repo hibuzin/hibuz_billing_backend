@@ -260,14 +260,14 @@ exports.productcreate = async (req, res) => {
         }
 
 
-        
+
         if (barcode && String(barcode).trim() !== "") {
             barcodeCode = String(barcode).trim();
         } else {
             barcodeCode = await generateBarcode(hierarchy.superAdminId);
         }
 
- 
+
         const savedBarcode = await Barcode.create({
             productId: product._id,
             code: barcodeCode,
@@ -797,8 +797,9 @@ exports.allProducts = async (req, res) => {
 
                 return {
                     ...product,
+                    stock: Number((product.stock || 0).toFixed(3)),
 
-                    totalAvailableQty,
+                    totalAvailableQty: Number(totalAvailableQty.toFixed(3)),
                     barcodeCount: barcodes.length,
 
                     barcodes: barcodes.map((barcode) => ({
@@ -806,7 +807,7 @@ exports.allProducts = async (req, res) => {
                         barcode: barcode.code || "",
 
                         qty: barcode.qty || 0,
-                        availableQty: barcode.availableQty || 0,
+                        availableQty: Number((barcode.availableQty || 0).toFixed(3)),
 
                         unit: barcode.unit || product.unit || "pcs",
                         unitValue: barcode.unitValue || product.unitValue || 1,
@@ -1053,8 +1054,9 @@ exports.ProductsById = async (req, res) => {
             success: true,
             data: {
                 ...product,
+                stock: Number((product.stock || 0).toFixed(3)),
 
-                totalAvailableQty,
+                totalAvailableQty: Number(totalAvailableQty.toFixed(3)),
                 barcodeCount: barcodes.length,
 
                 lowStockQty: product.lowStockQty || 10,
@@ -1064,7 +1066,7 @@ exports.ProductsById = async (req, res) => {
                     barcode: barcode.code || "",
 
                     qty: barcode.qty || 0,
-                    availableQty: barcode.availableQty || 0,
+                    availableQty: Number((barcode.availableQty || 0).toFixed(3)),
 
                     unit: barcode.unit || product.unit || "pcs",
                     unitValue: barcode.unitValue || product.unitValue || 1,

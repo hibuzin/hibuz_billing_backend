@@ -256,7 +256,7 @@ exports.productWiseCustomerReport = async (req, res) => {
             },
             { $unwind: "$customer" },
             {
-                
+
                 $group: {
                     _id: {
                         productName: "$items.name",

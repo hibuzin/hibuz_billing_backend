@@ -9,7 +9,6 @@ const DuePayment = require("../models/due_payment");
 const multer = require("multer");
 const csv = require("csv-parser");
 const fs = require("fs");
-const upload = multer({ dest: "uploads/" });
 
 
 const getNextCustomerId = async () => {
