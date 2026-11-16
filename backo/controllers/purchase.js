@@ -4,6 +4,7 @@ const Purchase = require("../models/purchase");
 const Product = require("../models/product");
 const ProductPriceHistory = require("../models/product_price_history");
 const Supplier = require("../models/supplier");
+const StockBatch = require("../models/stock_batch");
 const Barcode = require("../models/barcode");
 const Counter = require("../models/counter");
 const AuditLog = require("../models/audit_log");
@@ -239,11 +240,12 @@ exports.createPurchase = async (req, res) => {
 
             const netAmount = round2(netcost * qty);
 
-            const sellingPrice = Number(item.sellingPrice ?? product.sellingPrice ?? mrp);
+            const mrp = Number(item.mrp ?? product.mrp ?? 0);
 
-            const mrp = Number(item.mrp ?? product.mrp);
+            const sellingPrice = Number(
+                item.sellingPrice ?? product.sellingPrice ?? mrp
+            );
 
-           
             const purchaseUnit = product.unit || "pcs";
 
 
@@ -283,7 +285,7 @@ exports.createPurchase = async (req, res) => {
                 }
             }
 
-           
+
 
             const taxPercentage = Number(product.gstRate || 0);
 
@@ -381,6 +383,7 @@ exports.createPurchase = async (req, res) => {
 
 
             if (barcode) {
+
                 const existingBarcode = await Barcode.findOne({
                     code: barcode,
                     superAdminId: hierarchy.superAdminId
@@ -396,45 +399,92 @@ exports.createPurchase = async (req, res) => {
                     });
                 }
 
-                await Barcode.findOneAndUpdate(
-                    {
+                let barcodeDoc = await Barcode.findOne({
+                    productId: product._id,
+                    code: barcode,
+                    superAdminId: hierarchy.superAdminId
+                });
+
+                const batchData = {
+                    qty: stockQty,
+                    availableQty: stockQty,
+
+                    costPrice: item.netcost ?? netcost,
+                    sellingPrice: sellingPrice,
+                    mrp: mrp,
+                    gstRate: taxPercentage,
+
+                  purchaseId: null,
+                    purchaseDate: finalInvoiceDate
+                };
+
+                if (!barcodeDoc) {
+
+                    barcodeDoc = await Barcode.create({
                         productId: product._id,
                         code: barcode,
-                        superAdminId: hierarchy.superAdminId
-                    },
-                    {
-                        $set: {
-                            productId: product._id,
-                            code: barcode,
 
-                            mrp: item.mrp || product.mrp || 0,
-                            costPrice: item.costPrice || product.costPrice || 0,
-                            sellingPrice: item.sellingPrice || product.sellingPrice || 0,
-                            gstRate: product.gstRate || 0,
+                        qty: stockQty,
+                        availableQty: stockQty,
 
-                            unit: purchaseUnit,
-                            unitValue: purchaseUnitValue,
-                            isCustomUnitValue,
+                        batches: [
+                            batchData
+                        ],
 
-                            isSold: false,
+                        mrp: mrp,
+                        costPrice: item.netcost ?? netcost,
+                        sellingPrice: sellingPrice,
+                        gstRate: taxPercentage,
 
-                            ...hierarchy,
-                            createdBy: req.user.userId
-                        },
-                        $inc: {
+                        unit: purchaseUnit,
+                        unitValue: purchaseUnitValue,
+                        isCustomUnitValue,
 
-                            qty: stockQty,
-                            availableQty: stockQty
+                        isSold: false,
 
-                        }
-                    },
-                    {
-                        upsert: true,
-                        new: true
+                        ...hierarchy,
+                        createdBy: req.user.userId
+                    });
+
+                } else {
+
+                    barcodeDoc.qty =
+                        Number(barcodeDoc.qty || 0) + stockQty;
+
+                    barcodeDoc.availableQty =
+                        Number(barcodeDoc.availableQty || 0) + stockQty;
+
+                    if (!Array.isArray(barcodeDoc.batches)) {
+                        barcodeDoc.batches = [];
                     }
 
-                )
-            };
+                    barcodeDoc.batches.push(batchData);
+
+                    // Latest purchase becomes current barcode price
+                    barcodeDoc.costPrice =
+                        item.netcost ?? netcost;
+
+                    barcodeDoc.sellingPrice =
+                        sellingPrice;
+
+                    barcodeDoc.mrp =
+                        mrp;
+
+                    barcodeDoc.gstRate =
+                        taxPercentage;
+
+                    barcodeDoc.unit =
+                        purchaseUnit;
+
+                    barcodeDoc.unitValue =
+                        purchaseUnitValue;
+
+                    barcodeDoc.isCustomUnitValue =
+                        isCustomUnitValue;
+
+                    await barcodeDoc.save();
+                }
+            }
 
 
             if (priceLevel) {
@@ -758,6 +808,34 @@ exports.createPurchase = async (req, res) => {
         });
 
 
+        for (const item of purchase.items) {
+            await StockBatch.create({
+                productId: item.productId,
+
+                barcode: item.barcode,
+
+                purchaseId: purchase._id,
+
+                purchaseItemId: item._id,
+
+                batchNo: purchase.grnNo,
+
+                costPrice: item.netcost,
+
+                sellingPrice: item.sellingPrice,
+
+                mrp: item.mrp,
+
+                receivedQty: item.receivedQty,
+
+                availableQty: item.receivedQty,
+
+                soldQty: 0,
+
+                superAdminId: hierarchy.superAdminId
+            });
+        }
+
         await AuditLog.create({
             userId: req.user.userId,
             role: req.user.role,
@@ -1018,7 +1096,7 @@ exports.calculatePurchase = async (req, res) => {
             const totalStockQty = qty + freeQty;
 
             const netcost = Number(item.netcost || item.purchasePrice || item.netCost);
-           
+
             const sellingPrice = Number(item.sellingPrice || mrp);
             const taxPercentage = Number(item.gst || item.gstRate || item.taxPercentage || 0);
 
@@ -1034,7 +1112,7 @@ exports.calculatePurchase = async (req, res) => {
                 throw new Error(`Invalid purchase price at item ${index + 1}`);
             }
 
-          
+
 
             const netAmount = round2(netcost * qty);
             const grossAmount = round2(qty * netcost);
@@ -1355,7 +1433,7 @@ exports.getProductForPurchase = async (req, res) => {
             }
         }
 
-      
+
         return res.status(200).json({
             success: true,
             data: {
@@ -2060,7 +2138,7 @@ exports.updatePurchase = async (req, res) => {
             const netcost = Number(item.netcost || item.netCost);
             const netAmount = round2(netcost * qty);
 
-           const mrp = Number(item.mrp || 0);
+            const mrp = Number(item.mrp || 0);
 
             const productMrp = Number(product.mrp || 0);
 
@@ -2094,7 +2172,7 @@ exports.updatePurchase = async (req, res) => {
                 });
             }
 
-          
+
 
             const purchaseUnit = product.unit || "pcs";
 

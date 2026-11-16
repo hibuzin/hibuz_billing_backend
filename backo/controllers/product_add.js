@@ -94,7 +94,7 @@ exports.productcreate = async (req, res) => {
 
         const processedGstRate = Number(gstRate || 0);
 
-        const allowedGstRates = [0, 5, 12, 18, 28];
+        const allowedGstRates = [0, 5, 12, 18, 40];
 
         const allowedUnits = ["pcs", "kg", "g"];
 
@@ -134,7 +134,7 @@ exports.productcreate = async (req, res) => {
         ) {
             return res.status(400).json({
                 success: false,
-                message: "GST rate must be 0, 5, 12, 18 or 28"
+                message: "GST rate must be 0, 5, 12, 18 or 40"
             });
         }
 
@@ -260,7 +260,6 @@ exports.productcreate = async (req, res) => {
         }
 
 
-
         if (barcode && String(barcode).trim() !== "") {
             barcodeCode = String(barcode).trim();
         } else {
@@ -274,6 +273,8 @@ exports.productcreate = async (req, res) => {
 
             qty: 0,
             availableQty: 0,
+
+            batches: [],
 
             mrp: processedMrp,
 
@@ -290,7 +291,7 @@ exports.productcreate = async (req, res) => {
             createdBy: req.user.userId
         });
 
-        // Response only
+
         const createdBarcodes = [];
 
         for (let i = 0; i < totalGenerate; i++) {

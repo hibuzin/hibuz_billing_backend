@@ -3,9 +3,13 @@ const Session = require("../models/session");
 const Bill = require("../models/bill");
 const { attachHierarchy } = require("../utils/hierarchy");
 
+
 exports.startSession = async (req, res) => {
     try {
-        const { openingAmount, openingDenomination = {} } = req.body;
+        const {
+            openingAmount = 0,
+            openingDenomination = {}
+        } = req.body || {};
 
         const hierarchy = attachHierarchy(req.user);
         const userId = req.user.userId || req.user.id;
@@ -23,17 +27,7 @@ exports.startSession = async (req, res) => {
             });
         }
 
-        const anyActiveSession = await Session.findOne({
-            superAdminId: hierarchy.superAdminId,
-            status: "open"
-        });
 
-        if (anyActiveSession) {
-            return res.status(400).json({
-                success: false,
-                message: "Another cashier session is already open. Please handover or close it first."
-            });
-        }
 
         const d = openingDenomination || {};
 
@@ -50,11 +44,13 @@ exports.startSession = async (req, res) => {
             (Number(d.note200 || 0) * 200) +
             (Number(d.note500 || 0) * 500);
 
-        const hasDenomination = Object.keys(d).length > 0;
+        const hasDenomination =
+            Object.keys(d).length > 0 &&
+            Object.values(d).some(value => Number(value) > 0);
 
         const finalOpeningAmount = hasDenomination
             ? denominationAmount
-            : Number(openingAmount || 0);
+            : Number(openingAmount);
 
         const session = await Session.create({
             cashier: userId,
@@ -65,10 +61,23 @@ exports.startSession = async (req, res) => {
             expectedCash: finalOpeningAmount
         });
 
+
+        const sessionObj = session.toObject();
+
+        sessionObj.Date = session.createdAt.toLocaleDateString("en-GB");
+
+        sessionObj.startTime = session.createdAt.toLocaleTimeString("en-IN", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: true
+        });
+
+
         return res.status(201).json({
             success: true,
             message: "Session started successfully",
-            session
+            session: sessionObj
         });
 
     } catch (error) {
@@ -78,6 +87,7 @@ exports.startSession = async (req, res) => {
         });
     }
 };
+
 
 exports.handoverSession = async (req, res) => {
     try {

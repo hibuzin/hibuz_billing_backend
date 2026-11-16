@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Bill = require("../models/bill");
 
 const counter = require("../models/counter");
+const Offer = require("../models/offer");
 const Product = require("../models/product");
 const Barcode = require("../models/barcode");
 const Customer = require("../models/customer");
@@ -14,15 +15,98 @@ const AuditLog = require("../models/audit_log");
 
 
 
+const consumeBarcodeStock = async (barcode, qty) => {
+
+    qty = Number(qty);
+
+    if (!barcode) {
+        throw new Error("Barcode not found");
+    }
+
+    if (!Array.isArray(barcode.batches) || barcode.batches.length === 0) {
+        throw new Error(
+            `No batches found for barcode ${barcode.code}`
+        );
+    }
+
+    let remainingQty = qty;
+    let totalSelling = 0;
+
+    const consumedBatches = [];
+
+    
+    for (const batch of barcode.batches) {
+
+        if (remainingQty <= 0) {
+            break;
+        }
+
+        const available = Number(batch.availableQty || 0);
+
+        if (available <= 0) {
+            continue;
+        }
+
+        const consumeQty = Math.min(
+            available,
+            remainingQty
+        );
+
+        batch.availableQty =
+            available - consumeQty;
+
+        totalSelling +=
+            consumeQty * Number(batch.sellingPrice || 0);
+
+        consumedBatches.push({
+            batchId: batch._id,
+            qty: consumeQty,
+            sellingPrice: Number(batch.sellingPrice || 0),
+            costPrice: Number(batch.costPrice || 0),
+            mrp: Number(batch.mrp || 0)
+        });
+
+        remainingQty -= consumeQty;
+    }
+
+    if (remainingQty > 0) {
+        throw new Error(
+            `Batch stock not available for barcode ${barcode.code}. Required: ${qty}`
+        );
+    }
+
+    barcode.availableQty =
+        Number(barcode.availableQty || 0) - qty;
+
+    barcode.isSold =
+        barcode.availableQty <= 0;
+
+    await barcode.save();
+
+    return {
+        consumedBatches,
+        totalSelling
+    };
+};
+
+
 const getNextInvoiceNo = async (superAdminId) => {
     const result = await counter.findOneAndUpdate(
-        { name: `invoice_${superAdminId}` },
-        { $inc: { seq: 1 } },
-        { returnDocument: "after", upsert: true }
+        {
+            name: `invoice_${superAdminId}`
+        },
+        {
+            $inc: { seq: 1 }
+        },
+        {
+            returnDocument: "after",
+            upsert: true
+        }
     );
 
     return `INV-${String(result.seq).padStart(5, "0")}`;
 };
+
 
 exports.createBill = async (req, res) => {
     try {
@@ -134,7 +218,17 @@ exports.createBill = async (req, res) => {
                 });
             }
 
-            const normalSellingPrice = Number(barcode.sellingPrice || 0);
+            const batchResult = await consumeBarcodeStock(
+                barcode,
+                qty
+            );
+
+            const consumedBatches = batchResult.consumedBatches;
+
+            const totalSelling = batchResult.totalSelling;
+
+            const normalSellingPrice =
+                Number((totalSelling / qty).toFixed(2));
 
             let price = normalSellingPrice;
             let slabPrice = null;
@@ -151,8 +245,8 @@ exports.createBill = async (req, res) => {
 
 
 
-            const itemDiscountPercent = Number(billItem.discountPercent || 0);
-            const itemDiscountAmount = Number(billItem.discountAmount || 0);
+            const itemDiscountPercent = 0;
+            const itemDiscountAmount = 0;
 
             let itemDiscount = 0;
 
@@ -279,7 +373,17 @@ exports.createBill = async (req, res) => {
             });
 
 
-            const normalSellingPrice = Number(barcode.sellingPrice || 0);
+            const batchResult = await consumeBarcodeStock(
+                barcode,
+                qty
+            );
+
+            const consumedBatches = batchResult.consumedBatches;
+
+            const totalSelling = batchResult.totalSelling;
+
+            const normalSellingPrice =
+                Number((totalSelling / qty).toFixed(2));
 
             let price = normalSellingPrice;
             let slabPrice = null;
@@ -2324,7 +2428,7 @@ exports.getBillById = async (req, res) => {
 
 
 exports.editBill = async (req, res) => {
-   try {
+    try {
         const { billId } = req.params;
 
         const {
@@ -2998,7 +3102,7 @@ exports.editBill = async (req, res) => {
             finalPayments.length > 1
                 ? "split"
                 : finalPayments[0]?.method ||
-                  "due";
+                "due";
 
         bill.paymentStatus =
             paymentStatus;

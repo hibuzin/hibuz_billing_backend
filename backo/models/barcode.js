@@ -52,10 +52,63 @@ const barcodeSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+
     availableQty: {
         type: Number,
         default: 0
     },
+
+    batches: [
+        {
+            batchId: {
+                type: mongoose.Schema.Types.ObjectId,
+                default: () => new mongoose.Types.ObjectId()
+            },
+
+            qty: {
+                type: Number,
+                default: 0,
+                min: 0
+            },
+
+            availableQty: {
+                type: Number,
+                default: 0,
+                min: 0
+            },
+
+            costPrice: {
+                type: Number,
+                default: 0
+            },
+
+            sellingPrice: {
+                type: Number,
+                default: 0
+            },
+
+            mrp: {
+                type: Number,
+                default: 0
+            },
+
+            gstRate: {
+                type: Number,
+                default: 0
+            },
+
+            purchaseId: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: "Purchase",
+                default: null
+            },
+
+            purchaseDate: {
+                type: Date,
+                default: Date.now
+            }
+        }
+    ],
 
     isSold: {
         type: Boolean,
